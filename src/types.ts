@@ -28,7 +28,7 @@ export interface Athlete {
   };
 }
 
-export type View = 'login' | 'dashboard' | 'scout' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success' | 'captacao';
+export type View = 'login' | 'dashboard' | 'calendar' | 'scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
 export interface NavItem {
   id: View;

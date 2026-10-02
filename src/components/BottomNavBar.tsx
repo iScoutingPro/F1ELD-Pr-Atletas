@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, Search, BarChart3, Settings, Monitor } from 'lucide-react';
+import { LayoutGrid, Users, Search, BarChart3, CalendarRange } from 'lucide-react';
 import { View, NavItem } from '../types';
 
 interface BottomNavBarProps {
@@ -11,11 +11,10 @@ interface BottomNavBarProps {
 export const BottomNavBar = ({ activeView, setView, athleteCount }: BottomNavBarProps) => {
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'DASHBOARD', icon: LayoutGrid },
-    { id: 'athletes', label: 'ATLETAS', icon: Users },
-    { id: 'captacao', label: 'CAPTAÇÃO', icon: Search },
-    { id: 'scout', label: 'SCOUT', icon: BarChart3 },
-    { id: 'sessions', label: 'SESSÕES', icon: Monitor },
-    { id: 'settings', label: 'AJUSTES', icon: Settings },
+    { id: 'calendar', label: 'CALENDÁRIO', icon: CalendarRange },
+    { id: 'athletes', label: 'ATLETAS AGENCIADOS', icon: Users },
+    { id: 'negociados', label: 'ATLETAS NEGOCIADOS', icon: BarChart3 },
+    { id: 'atletas-totais', label: 'ATLETAS TOTAIS', icon: Users },
   ];
 
   return (
@@ -25,7 +24,7 @@ export const BottomNavBar = ({ activeView, setView, athleteCount }: BottomNavBar
         const isActive = activeView === item.id;
         return (
           <button
-            key={item.id}
+            key={`${item.id}-${item.label}`}
             onClick={() => setView(item.id)}
             className={`flex flex-col items-center justify-center gap-1 transition-all duration-300 ${
               isActive ? 'text-white scale-110' : 'text-on-surface-variant opacity-60 hover:opacity-100'

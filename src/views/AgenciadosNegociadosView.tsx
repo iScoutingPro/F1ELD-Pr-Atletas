@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
-import { Search, Clock, Zap, Target, Shield, Disc } from 'lucide-react';
+import { Search, Users, TrendingUp, Shield, Disc } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Athlete } from '../types';
 
-interface ScoutViewProps {
+interface AgenciadosNegociadosViewProps {
   athletes: Athlete[];
   onSelectAthlete?: (athlete: Athlete) => void;
 }
 
-export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
+export const AgenciadosNegociadosView = ({ athletes, onSelectAthlete }: AgenciadosNegociadosViewProps) => {
   const [search, setSearch] = useState('');
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  const suggestions = athletes.filter(a => 
-    `${a.name} ${a.lastName}`.toLowerCase().includes(search.toLowerCase()) &&
+  const combined = athletes.filter((athlete) => athlete.source === 'Captado' || athlete.status === 'In Club');
+
+  const suggestions = combined.filter((athlete) =>
+    `${athlete.name} ${athlete.lastName}`.toLowerCase().includes(search.toLowerCase()) &&
     search.length > 0
   );
 
@@ -33,19 +35,27 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
       setSelectedAthlete(null);
       return;
     }
-    const found = athletes.find(a => 
-      `${a.name} ${a.lastName}`.toLowerCase() === search.toLowerCase()
+
+    const found = combined.find(
+      (athlete) => `${athlete.name} ${athlete.lastName}`.toLowerCase() === search.toLowerCase()
     );
+
     if (found) {
       setSelectedAthlete(found);
       setShowSuggestions(false);
     }
   };
 
-  const totalAthletes = athletes.length;
-  const avgTactical = totalAthletes > 0 ? Math.round(athletes.reduce((acc, a) => acc + a.stats.tactical, 0) / totalAthletes) : 0;
-  const avgPhysical = totalAthletes > 0 ? Math.round(athletes.reduce((acc, a) => acc + a.stats.physical, 0) / totalAthletes) : 0;
-  const avgTechnical = totalAthletes > 0 ? Math.round(athletes.reduce((acc, a) => acc + a.stats.technical, 0) / totalAthletes) : 0;
+  const totalAthletes = combined.length || 1;
+  const avgTactical = Math.round(
+    combined.reduce((acc, athlete) => acc + athlete.stats.tactical, 0) / totalAthletes
+  );
+  const avgPhysical = Math.round(
+    combined.reduce((acc, athlete) => acc + athlete.stats.physical, 0) / totalAthletes
+  );
+  const avgTechnical = Math.round(
+    combined.reduce((acc, athlete) => acc + athlete.stats.technical, 0) / totalAthletes
+  );
 
   const displayData = selectedAthlete ? {
     name: selectedAthlete.name,
@@ -53,16 +63,14 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
     category: selectedAthlete.category,
     position: selectedAthlete.position,
     stats: selectedAthlete.stats,
-    rating: selectedAthlete.rating,
-    isAggregate: false
+    isAggregate: false,
   } : {
-    name: 'SCOUT',
-    lastName: 'GERAL',
-    category: 'PORTFÓLIO COMPLETO',
+    name: 'ATLETAS',
+    lastName: 'AGENCIADOS + NEGOCIADOS',
+    category: 'PORTFÓLIO COMBINADO',
     position: 'MÉDIA GLOBAL',
     stats: { tactical: avgTactical, physical: avgPhysical, technical: avgTechnical },
-    rating: 'A',
-    isAggregate: true
+    isAggregate: true,
   };
 
   return (
@@ -70,8 +78,8 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
       <section className="max-w-2xl mx-auto relative">
         <form onSubmit={handleSearch} className="relative group z-[70]">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant group-focus-within:text-primary transition-colors" />
-          <input 
-            type="text" 
+          <input
+            type="text"
             value={search}
             onFocus={() => setShowSuggestions(true)}
             onChange={(e) => {
@@ -79,11 +87,11 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
               setShowSuggestions(true);
               if (!e.target.value) setSelectedAthlete(null);
             }}
-            placeholder="Pesquisar nome do atleta..."
+            placeholder="Pesquisar atleta..."
             className="w-full bg-surface-low border border-white/5 text-white pl-16 pr-6 py-6 rounded-2xl text-sm focus:ring-2 focus:ring-primary focus:bg-surface-high transition-all outline-none italic uppercase font-black tracking-widest"
           />
           {search && (
-            <button 
+            <button
               type="button"
               onClick={() => { setSearch(''); setSelectedAthlete(null); setShowSuggestions(false); }}
               className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary uppercase tracking-widest"
@@ -95,7 +103,7 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
 
         <AnimatePresence>
           {showSuggestions && search.length > 0 && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
@@ -128,7 +136,7 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
               ) : (
                 <div className="px-6 py-8 text-center">
                   <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant italic">
-                    Nenhum atleta encontrado no sistema
+                    Nenhum atleta encontrado
                   </p>
                 </div>
               )}
@@ -140,106 +148,74 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
       <section className="relative">
         <div className="absolute -left-4 top-0 w-1 h-24 bg-primary opacity-20" />
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant mb-2">
-          {displayData.isAggregate ? 'Análise de Performance Global' : 'Análise Individual do Atleta'}
+          {displayData.isAggregate ? 'Visão consolidada' : 'Análise individual do atleta'}
         </p>
         <h2 className="text-6xl md:text-8xl font-black tracking-tighter leading-none mb-4 text-white italic uppercase">
-          {displayData.name}<br/><span className="opacity-40">{displayData.lastName}</span>
+          {displayData.name}<br /><span className="opacity-40">{displayData.lastName}</span>
         </h2>
         <div className="flex gap-4 items-center">
           <span className="px-3 py-1 bg-surface-high text-[10px] font-black uppercase tracking-widest text-primary rounded">{displayData.position}</span>
           <span className="px-3 py-1 bg-surface-high text-[10px] font-black uppercase tracking-widest text-on-surface-variant rounded">{displayData.category}</span>
-          {selectedAthlete?.clubLogo ? (
-            <div className="flex items-center gap-2 px-3 py-1 bg-surface-high rounded">
-              <img src={selectedAthlete.clubLogo} alt={selectedAthlete.club} className="w-4 h-4 object-contain" referrerPolicy="no-referrer" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white italic">{selectedAthlete.club}</span>
-            </div>
-          ) : selectedAthlete && (
-            <div className="flex items-center gap-2 px-3 py-1 bg-surface-high rounded">
-              <div className="w-1.5 h-1.5 rounded-full bg-error" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Livre no Mercado</span>
-            </div>
-          )}
         </div>
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-surface-low p-8 rounded-3xl relative overflow-hidden group border border-white/5">
+        <div className="md:col-span-2 bg-surface-low p-8 rounded-3xl border border-white/5">
           <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-8 flex items-center gap-2">
-            <div className="w-2 h-2 bg-primary" /> {displayData.isAggregate ? 'Métricas Somadas' : 'Scouting Individual'}
+            <div className="w-2 h-2 bg-primary" /> Métricas combinadas
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 relative z-10">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             {[
-              { label: 'Pontuação Tática', val: displayData.stats.tactical },
-              { label: 'Pontuação Física', val: displayData.stats.physical },
-              { label: 'Pontuação Técnica', val: displayData.stats.technical }
-            ].map((s, i) => (
-              <div key={i} className="space-y-2">
-                <div className="text-5xl font-black tracking-tighter text-white italic">{s.val}</div>
-                <div className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest">{s.label}</div>
+              { label: 'Tática', val: displayData.stats.tactical },
+              { label: 'Física', val: displayData.stats.physical },
+              { label: 'Técnica', val: displayData.stats.technical },
+            ].map((item, index) => (
+              <div key={index} className="space-y-2">
+                <div className="text-5xl font-black tracking-tighter text-white italic">{item.val}</div>
+                <div className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest">{item.label}</div>
                 <div className="h-1 w-full bg-surface-highest rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${s.val}%` }} className="h-full bg-primary" />
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${item.val}%` }} className="h-full bg-primary" />
                 </div>
               </div>
             ))}
           </div>
         </div>
+
         <div className="bg-surface-high p-8 rounded-3xl flex flex-col justify-between border border-white/10">
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-6">
-              {displayData.isAggregate ? 'Média do Portfólio' : 'Status DVD'}
-            </h3>
+            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-6">Visão geral</h3>
             <div className="flex items-center gap-4">
-              <div className={`w-20 h-20 rounded-3xl flex items-center justify-center ${selectedAthlete?.hasDvd ? 'bg-primary/10 border border-primary/20' : 'bg-error/5 border border-error/10 opacity-40'}`}>
-                {selectedAthlete?.hasDvd ? (
-                  <Disc className="w-12 h-12 text-primary animate-pulse-slow" />
-                ) : (
-                  <div className="relative">
-                    <Disc className="w-12 h-12 text-error/60" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-14 h-1 bg-error/40 rotate-45 rounded-full" />
-                    </div>
-                  </div>
-                )}
+              <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <TrendingUp className="w-10 h-10 text-primary" />
               </div>
-              {!displayData.isAggregate && (
-                <div>
-                  <div className={`text-2xl font-black italic uppercase leading-none ${selectedAthlete?.hasDvd ? 'text-primary' : 'text-error/60'}`}>
-                    {selectedAthlete?.hasDvd ? 'DISPONÍVEL' : 'AUSENTE'}
-                  </div>
-                  <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mt-1">Vídeo DVD</div>
-                </div>
-              )}
+              <div>
+                <div className="text-2xl font-black italic uppercase leading-none text-primary">PORTFÓLIO</div>
+                <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mt-1">Agenciamento + negociação</div>
+              </div>
             </div>
           </div>
           <div className="pt-6 border-t border-white/10">
-            <p className="text-sm text-on-surface-variant leading-relaxed italic">
-              {displayData.isAggregate ? "Visão consolidada da performance técnica." : "Análise detalhada baseada em relatórios de campo."}
-            </p>
+            <p className="text-sm text-on-surface-variant leading-relaxed italic">Acompanhamento integrado de atletas agenciados e em processo de negociação.</p>
           </div>
         </div>
       </section>
 
-      {!displayData.isAggregate && (
-        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { label: 'Minutagem', val: '1.240\'', icon: Clock },
-            { label: 'Precisão de Passe', val: '91.4%', icon: Zap },
-            { label: 'Duelos Ganhos', val: '12/15', icon: Target },
-            { label: 'Interceptações', val: '08', icon: Shield }
-          ].map((stat, i) => (
-            <div key={i} className="bg-surface-low p-6 rounded-2xl hover:bg-surface-high transition-all border border-white/5">
-              <div className="flex justify-between items-start mb-4">
-                <stat.icon className="w-5 h-5 text-on-surface-variant" />
-                <span className="text-2xl font-black text-white italic">{stat.val}</span>
-              </div>
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">{stat.label}</h4>
-              <div className="mt-4 h-1 w-full bg-surface-highest rounded-full overflow-hidden">
-                <div className="h-full bg-primary w-2/3" />
-              </div>
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Atletas', val: combined.length.toString(), icon: Users },
+          { label: 'Propostas', val: '12', icon: Shield },
+          { label: 'Interesse', val: '91%', icon: TrendingUp },
+          { label: 'Cobertura', val: '96%', icon: Disc },
+        ].map((stat, index) => (
+          <div key={index} className="bg-surface-low p-6 rounded-2xl border border-white/5">
+            <div className="flex justify-between items-center mb-4">
+              <stat.icon className="w-5 h-5 text-on-surface-variant" />
+              <span className="text-2xl font-black text-white italic">{stat.val}</span>
             </div>
-          ))}
-        </section>
-      )}
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">{stat.label}</h4>
+          </div>
+        ))}
+      </section>
     </div>
   );
 };

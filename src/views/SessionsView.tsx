@@ -21,9 +21,10 @@ interface MonthGroup {
 
 interface SessionsViewProps {
   athletes: Athlete[];
+  onSelectAthlete?: (athlete: Athlete) => void;
 }
 
-export const SessionsView = ({ athletes }: SessionsViewProps) => {
+export const SessionsView = ({ athletes, onSelectAthlete }: SessionsViewProps) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -126,6 +127,10 @@ export const SessionsView = ({ athletes }: SessionsViewProps) => {
                   key={athlete.id}
                   onClick={() => {
                     setSelectedAthlete(athlete);
+                    setShowDropdown(false);
+                    if (onSelectAthlete) {
+                      onSelectAthlete(athlete);
+                    }
                     setSearchTerm(`${athlete.name} ${athlete.lastName}`);
                     setShowDropdown(false);
                   }}

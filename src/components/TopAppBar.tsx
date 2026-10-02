@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronLeft, Bell } from 'lucide-react';
+import { ChevronLeft, LogOut } from 'lucide-react';
 import { Logo } from './Logo';
 
 interface TopAppBarProps {
@@ -7,9 +7,10 @@ interface TopAppBarProps {
   showBack?: boolean;
   onBack?: () => void;
   onLogoClick?: () => void;
+  onLogout?: () => void;
 }
 
-export const TopAppBar = ({ title, showBack, onBack, onLogoClick }: TopAppBarProps) => {
+export const TopAppBar = ({ title, showBack, onBack, onLogoClick, onLogout }: TopAppBarProps) => {
   return (
     <header className="fixed top-0 w-full z-50 bg-background/80 backdrop-blur-xl border-b border-white/5 h-16 flex items-center justify-between px-6">
       <div className="flex items-center gap-4">
@@ -32,9 +33,12 @@ export const TopAppBar = ({ title, showBack, onBack, onLogoClick }: TopAppBarPro
       </div>
       
       <div className="flex items-center gap-4">
-        <button className="p-2 hover:bg-surface-high rounded-full transition-colors relative">
-          <Bell className="w-5 h-5 text-white" />
-          <span className="absolute top-2 right-2 w-2 h-2 bg-error rounded-full" />
+        <button
+          aria-label="Sair"
+          onClick={onLogout ?? (() => window.location.reload())}
+          className="p-2 rounded-full bg-red-500/10 border border-red-500/30 transition-colors hover:bg-red-500/20"
+        >
+          <LogOut className="w-5 h-5 text-red-400" />
         </button>
       </div>
     </header>
