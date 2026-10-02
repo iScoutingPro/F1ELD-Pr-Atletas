@@ -156,7 +156,7 @@ export const ScoutView = ({ athletes, onSelectAthlete }: ScoutViewProps) => {
           ) : selectedAthlete && (
             <div className="flex items-center gap-2 px-3 py-1 bg-surface-high rounded">
               <div className="w-1.5 h-1.5 rounded-full bg-error" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Livre no Mercado</span>
+              <span className="text-[10px] font-black uppercase tracking-widest text-white italic">Sem Clube</span>
             </div>
           )}
         </div>

@@ -37,6 +37,7 @@ export interface Athlete {
   hasDvd?: boolean;
   dvdLink?: string;
   source: 'Captado' | 'Indicado';
+  listType?: 'agenciados' | 'negociados';
   stats: {
     tactical: number;
     physical: number;
@@ -44,7 +45,19 @@ export interface Athlete {
   };
 }
 
-export type View = 'login' | 'dashboard' | 'calendar' | 'scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
+export interface Game {
+  id: string;
+  date: string;
+  time?: string;
+  home: string;
+  away: string;
+  venue?: string;
+  category?: string;
+  competition?: string;
+  athleteIds: string[];
+}
+
+export type View ='login' | 'dashboard' | 'calendar' | 'scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
 export interface NavItem {
   id: View;

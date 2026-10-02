@@ -32,6 +32,7 @@ alter table public.athletes
   add column if not exists has_dvd boolean,
   add column if not exists dvd_link text,
   add column if not exists source text,
+  add column if not exists list_type text default 'agenciados',
   add column if not exists stats jsonb;
 
 -- Faz a API do Supabase enxergar as colunas novas na hora

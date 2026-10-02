@@ -1,20 +1,25 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
-import { CalendarDays, MapPin, Clock3, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MapPin, Clock3, ChevronLeft, ChevronRight, Plus, Pencil, Search, Check, X, Trash2, Trophy } from 'lucide-react';
+import { Athlete, Game } from '../types';
+
+interface CalendarViewProps {
+  games: Game[];
+  athletes: Athlete[];
+  onSelectAthlete?: (athlete: Athlete) => void;
+  // Só o admin recebe os callbacks de gravação; sem eles os botões não aparecem
+  onSaveGame?: (game: Omit<Game, 'id'>, id?: string) => Promise<boolean>;
+  onDeleteGame?: (id: string) => Promise<boolean>;
+}
 
 const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-const fixtures = [
-  { date: '2026-09-12', home: 'F1eld Pró FC', away: 'Ativa Sports', venue: 'Estádio do Vale', time: '20:00', type: 'Casa', athleteImage: 'https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=300&q=80', athleteName: 'Rafael Costa', category: 'Campeonato Nacional' },
-  { date: '2026-09-12', home: 'F1eld Pró FC', away: 'Tupy FC', venue: 'Centro de Treinamento', time: '16:30', type: 'Casa', athleteImage: 'https://images.unsplash.com/photo-1541534401786-2077eed87a74?auto=format&fit=crop&w=300&q=80', athleteName: 'Gabriel Alves', category: 'Coletivo Sub-20' },
-  { date: '2026-09-12', home: 'Ativa Sports', away: 'Nova Era FC', venue: 'Arena Norte', time: '18:45', type: 'Fora', athleteImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80', athleteName: 'Mateus Silva', category: 'Amistoso' },
-  { date: '2026-09-12', home: 'F1eld Pró FC', away: 'Riviera SC', venue: 'Estádio do Vale', time: '21:15', type: 'Casa', athleteImage: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80', athleteName: 'Leonardo Reis', category: 'Liga Regional' },
-  { date: '2026-09-18', home: 'Ativa Sports', away: 'Lions FC', venue: 'Arena Norte', time: '18:30', type: 'Fora', athleteImage: 'https://images.unsplash.com/photo-1541534401786-2077eed87a74?auto=format&fit=crop&w=300&q=80', athleteName: 'Mateus Silva', category: 'Amistoso' },
-  { date: '2026-09-25', home: 'F1eld Pró FC', away: 'Northside SC', venue: 'Centro de Treinamento', time: '19:15', type: 'Casa', athleteImage: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80', athleteName: 'Henrique Lobo', category: 'Preparação' },
-  { date: '2026-09-30', home: 'Lions FC', away: 'F1eld Pró FC', venue: 'Complexo Esportivo', time: '17:45', type: 'Fora', athleteImage: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=300&q=80', athleteName: 'Gabriel Nunes', category: 'Liga Regional' },
-  { date: '2026-10-02', home: 'F1eld Pró FC', away: 'Belo Horizonte FC', venue: 'Estádio do Vale', time: '20:30', type: 'Casa', athleteImage: 'https://images.unsplash.com/photo-1504593811423-6dd665756598?auto=format&fit=crop&w=300&q=80', athleteName: 'Lucas Mendes', category: 'Copa do Brasil' },
-  { date: '2026-10-07', home: 'Riviera SC', away: 'F1eld Pró FC', venue: 'Arena Central', time: '19:00', type: 'Fora', athleteImage: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?auto=format&fit=crop&w=300&q=80', athleteName: 'Davi Rocha', category: 'Pós-temporada' },
-];
+// Mesma lista de EditProfileView e AthletesListView
+const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
+
+const labelClass = 'ml-1 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant';
+const inputClass = 'w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
 
 const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -23,16 +28,247 @@ const formatDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const getMonthLabel = (date: Date) =>
-  date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/^./, (char) => char.toUpperCase());
-
 const getMonthShortLabel = (date: Date) =>
   date.toLocaleDateString('pt-BR', { month: 'long' }).replace(/^./, (char) => char.toUpperCase());
 
-export const CalendarView = () => {
-  const initialMonth = new Date(2026, 8, 1);
+const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
+
+// Sigla do time para o escudo quando não há logo: iniciais das palavras ou as três primeiras letras
+const teamInitials = (name: string) => {
+  const words = name.trim().split(/s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  return (words.length === 1 ? words[0].slice(0, 3) : words.slice(0, 3).map((word) => word[0]).join('')).toUpperCase();
+};
+
+const TeamCrest = ({ name, logo }: { name: string; logo?: string }) => (
+  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-white/15 bg-gradient-to-b from-white/[0.14] to-white/[0.02] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_10px_24px_rgba(0,0,0,0.45)]">
+    {logo ? (
+      <img src={logo} alt="" className="h-9 w-9 object-contain" />
+    ) : (
+      <span className="text-sm font-black italic tracking-tight text-white">{teamInitials(name)}</span>
+    )}
+  </div>
+);
+
+interface GameFormProps {
+  game?: Game;
+  initialDate: string;
+  athletes: Athlete[];
+  onSave: (game: Omit<Game, 'id'>, id?: string) => Promise<boolean>;
+  onDelete?: (id: string) => Promise<boolean>;
+  onClose: () => void;
+}
+
+const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: GameFormProps) => {
+  const [date, setDate] = useState(game?.date || initialDate);
+  const [time, setTime] = useState(game?.time || '');
+  const [home, setHome] = useState(game?.home || '');
+  const [away, setAway] = useState(game?.away || '');
+  const [venue, setVenue] = useState(game?.venue || '');
+  const [category, setCategory] = useState(game?.category || '');
+  const [competition, setCompetition] = useState(game?.competition || '');
+  const [athleteIds, setAthleteIds] = useState<string[]>(game?.athleteIds || []);
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  const sortedAthletes = useMemo(
+    () => [...athletes].sort((a, b) => fullName(a).localeCompare(fullName(b), 'pt-BR')),
+    [athletes],
+  );
+
+  const term = search.trim().toLowerCase();
+  const visibleAthletes = term
+    ? sortedAthletes.filter((a) => fullName(a).toLowerCase().includes(term) || (a.club || '').toLowerCase().includes(term))
+    : sortedAthletes;
+
+  const selectedAthletes = sortedAthletes.filter((a) => athleteIds.includes(a.id));
+
+  const toggleAthlete = (id: string) =>
+    setAthleteIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const saved = await onSave({ date, time, home, away, venue, category, competition, athleteIds }, game?.id);
+    setSaving(false);
+    if (saved) onClose();
+  };
+
+  const handleDelete = async () => {
+    if (!game || !onDelete) return;
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setSaving(true);
+    const deleted = await onDelete(game.id);
+    setSaving(false);
+    if (deleted) onClose();
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
+      <div className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-surface-high text-base font-black text-white transition hover:border-primary/40 hover:bg-primary/10"
+          aria-label="Fechar"
+        >
+          ×
+        </button>
+
+        <form onSubmit={handleSubmit} className="relative space-y-5 px-6 pb-8 pt-10 sm:px-10">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Calendário</p>
+            <h2 className="mt-2 text-2xl font-black uppercase italic leading-none text-white">{game ? 'Editar jogo' : 'Adicionar jogo'}</h2>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className={labelClass}>Data *</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Horário</label>
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Mandante *</label>
+              <input type="text" value={home} onChange={(e) => setHome(e.target.value)} className={inputClass} placeholder="Time da casa" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Visitante *</label>
+              <input type="text" value={away} onChange={(e) => setAway(e.target.value)} className={inputClass} placeholder="Time visitante" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Categoria</label>
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
+                <option value="">Selecione</option>
+                {CATEGORIES.map((item) => (
+                  <option key={item} value={item}>{item}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Competição</label>
+              <input type="text" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} placeholder="Ex.: Campeonato Paulista" />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className={labelClass}>Local</label>
+            <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputClass} placeholder="Estádio ou centro de treinamento" />
+          </div>
+
+          <div className="space-y-2">
+            <label className={labelClass}>Atletas vinculados ({athleteIds.length})</label>
+
+            {selectedAthletes.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {selectedAthletes.map((athlete) => (
+                  <button
+                    key={athlete.id}
+                    type="button"
+                    onClick={() => toggleAthlete(athlete.id)}
+                    className="inline-flex items-center gap-2 rounded-full bg-primary py-1 pl-1 pr-3 text-[10px] font-black uppercase tracking-[0.12em] text-background transition hover:opacity-80"
+                    title="Remover do jogo"
+                  >
+                    <img src={athlete.image} alt="" className="h-6 w-6 rounded-full object-cover" />
+                    {fullName(athlete)}
+                    <X className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className={`${inputClass} pl-11`}
+                placeholder="Buscar atleta por nome ou clube"
+              />
+            </div>
+
+            <div className="max-h-60 space-y-1 overflow-y-auto rounded-2xl border border-white/10 bg-surface-high/40 p-2" style={{ scrollbarWidth: 'thin', scrollbarColor: '#7a7a7a transparent' }}>
+              {visibleAthletes.length > 0 ? (
+                visibleAthletes.map((athlete) => {
+                  const selected = athleteIds.includes(athlete.id);
+                  return (
+                    <button
+                      key={athlete.id}
+                      type="button"
+                      onClick={() => toggleAthlete(athlete.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left transition ${selected ? 'border-primary/60 bg-primary/10' : 'border-transparent hover:border-white/10 hover:bg-white/5'}`}
+                    >
+                      <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-black uppercase text-white">{fullName(athlete)}</p>
+                        <p className="truncate text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
+                          {[athlete.club, athlete.category, athlete.listType === 'negociados' ? 'Negociado' : 'Agenciado'].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${selected ? 'border-primary bg-primary text-background' : 'border-white/20'}`}>
+                        {selected && <Check className="h-3.5 w-3.5" />}
+                      </span>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="p-4 text-center text-xs text-on-surface-variant">Nenhum atleta encontrado.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 pt-2">
+            {game && onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-2xl border border-error/40 bg-error/15 px-5 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-error transition hover:bg-error hover:text-white disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+                {confirmingDelete ? 'Confirmar exclusão' : 'Excluir'}
+              </button>
+            )}
+            <div className="flex flex-1 justify-end gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-2xl border border-white/10 bg-surface-high px-6 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:border-white/20"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-2xl bg-primary px-8 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-xl transition hover:scale-[1.02] disabled:opacity-50"
+              >
+                {saving ? 'Salvando...' : 'Salvar jogo'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  );
+};
+
+export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onDeleteGame }: CalendarViewProps) => {
+  const todayKey = formatDateKey(new Date());
+  const initialMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
-  const [selectedDate, setSelectedDate] = useState('2026-09-30');
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  // null = formulário fechado; 'new' = cadastro; Game = edição
+  const [formGame, setFormGame] = useState<Game | 'new' | null>(null);
 
   const monthDays = useMemo(() => {
     const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -48,32 +284,40 @@ export const CalendarView = () => {
     return days;
   }, [currentMonth]);
 
-  const selectedFixture = fixtures.filter((item) => item.date === selectedDate);
+  const gameDates = useMemo(() => new Set(games.map((game) => game.date)), [games]);
+  const athletesById = useMemo(() => new Map(athletes.map((athlete) => [athlete.id, athlete])), [athletes]);
+  // Escudo do time: aproveita o escudo cadastrado em algum atleta do mesmo clube
+  const clubLogos = useMemo(() => {
+    const logos = new Map<string, string>();
+    athletes.forEach((athlete) => {
+      if (athlete.clubLogo && athlete.club) logos.set(athlete.club.trim().toLowerCase(), athlete.clubLogo);
+    });
+    return logos;
+  }, [athletes]);
+
+  const selectedGames = games
+    .filter((game) => game.date === selectedDate)
+    .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
   const moveMonth = (direction: number) => {
     const nextMonth = new Date(currentMonth);
     nextMonth.setMonth(currentMonth.getMonth() + direction);
     setCurrentMonth(nextMonth);
 
-    const firstFixtureInMonth = fixtures.find((fixture) => {
-      const fixtureDate = new Date(`${fixture.date}T12:00:00`);
-      return fixtureDate.getMonth() === nextMonth.getMonth() && fixtureDate.getFullYear() === nextMonth.getFullYear();
-    });
+    const monthPrefix = formatDateKey(nextMonth).slice(0, 7);
+    const firstGameInMonth = [...gameDates].filter((date) => date.startsWith(monthPrefix)).sort()[0];
 
-    setSelectedDate(firstFixtureInMonth ? firstFixtureInMonth.date : formatDateKey(new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 1)));
+    setSelectedDate(firstGameInMonth || formatDateKey(nextMonth));
   };
-
-  const isSelectedDateInCurrentMonth = new Date(`${selectedDate}T12:00:00`).getMonth() === currentMonth.getMonth() && new Date(`${selectedDate}T12:00:00`).getFullYear() === currentMonth.getFullYear();
 
   const isCurrentMonth = currentMonth.getMonth() === initialMonth.getMonth() && currentMonth.getFullYear() === initialMonth.getFullYear();
 
   const resetToInitialMonth = () => {
     setCurrentMonth(initialMonth);
-    setSelectedDate('2026-09-30');
+    setSelectedDate(todayKey);
   };
 
   const selectedDateValue = new Date(`${selectedDate}T12:00:00`);
-  const selectedFixtureTime = selectedFixture[0]?.time ?? '--:--';
 
   return (
     <div className="min-h-screen px-6 pt-24 pb-28">
@@ -88,9 +332,9 @@ export const CalendarView = () => {
               <div className="flex flex-1 items-center justify-center gap-2 text-center">
                 <button
                   onClick={resetToInitialMonth}
-                  disabled={isCurrentMonth}
+                  disabled={isCurrentMonth && selectedDate === todayKey}
                   className={`inline-flex items-center justify-center rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-[0.25em] transition ${
-                    isCurrentMonth
+                    isCurrentMonth && selectedDate === todayKey
                       ? 'border-white/10 bg-white/5 text-on-surface-variant opacity-60 cursor-not-allowed'
                       : 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20 shadow-[0_10px_25px_rgba(59,130,246,0.15)]'
                   }`}
@@ -118,9 +362,9 @@ export const CalendarView = () => {
 
               {monthDays.map((day) => {
                 const key = formatDateKey(day);
-                const isCurrentMonth = day.getMonth() === currentMonth.getMonth();
+                const isInMonth = day.getMonth() === currentMonth.getMonth();
                 const isSelected = selectedDate === key;
-                const hasFixture = fixtures.some((fixture) => fixture.date === key);
+                const hasGame = gameDates.has(key);
 
                 return (
                   <button
@@ -129,13 +373,13 @@ export const CalendarView = () => {
                     className={`relative flex h-20 flex-col items-center justify-center rounded-2xl border transition-all ${
                       isSelected
                         ? 'border-primary bg-primary/15 text-white shadow-[0_12px_30px_rgba(59,130,246,0.25)]'
-                        : isCurrentMonth
+                        : isInMonth
                           ? 'border-white/5 bg-surface-high text-white/90 hover:border-white/20'
                           : 'border-white/5 bg-surface-high/60 text-white/35'
                     }`}
                   >
-                    <span className="text-sm font-black">{day.getDate()}</span>
-                    {hasFixture && (
+                    <span className={`text-sm font-black ${key === todayKey ? 'underline decoration-2 underline-offset-4' : ''}`}>{day.getDate()}</span>
+                    {hasGame && (
                       <span className={`mt-1 h-2 w-2 rounded-full ${isSelected ? 'bg-primary' : 'bg-green-400'}`} />
                     )}
                   </button>
@@ -145,72 +389,131 @@ export const CalendarView = () => {
           </motion.div>
 
           <motion.aside initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="flex h-[calc(100vh-10rem)] min-h-[420px] flex-col rounded-[28px] border border-white/10 bg-surface-low/80 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <div className="w-full">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Agenda</p>
                 <h3 className="mt-2 text-[clamp(1.1rem,1.8vw,1.8rem)] font-black uppercase italic leading-none text-white">
                   {selectedDateValue.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </h3>
               </div>
+
+              {onSaveGame && (
+                <button
+                  type="button"
+                  onClick={() => setFormGame('new')}
+                  className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-primary px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-background shadow-[0_8px_24px_rgba(255,255,255,0.14)] transition hover:scale-[1.03]"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar jogo
+                </button>
+              )}
             </div>
 
             <div
               className="agenda-scroll flex-1 space-y-3 overflow-y-auto pr-1"
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#7a7a7a transparent' }}
             >
-              {selectedFixture.length > 0 ? (
-                selectedFixture.map((fixture) => (
-                  <div key={fixture.date} className="rounded-[28px] border border-white/10 bg-[#1e2023]/80 p-4 shadow-[0_18px_45px_rgba(0,0,0,0.28)]">
-                    <div className="mb-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-[#2b2d30]/80 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                      <div className="flex min-w-[84px] flex-col items-center justify-center">
-                        <img
-                          src={fixture.athleteImage}
-                          alt={fixture.home}
-                          className="h-16 w-16 rounded-2xl object-cover border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]"
-                        />
-                        <p className="mt-2 max-w-[80px] text-center text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant leading-[1.4]">
-                          {fixture.athleteName}
-                        </p>
+              {selectedGames.length > 0 ? (
+                selectedGames.map((game) => {
+                  const gameAthletes = game.athleteIds
+                    .map((id) => athletesById.get(id))
+                    .filter((athlete): athlete is Athlete => !!athlete);
+
+                  return (
+                    <div key={game.id} className="relative overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-[#24272b] to-[#17191c] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_24px_60px_rgba(0,0,0,0.45)]">
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+                      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-white/[0.07] to-transparent" />
+
+                      <div className="relative flex items-center gap-2 px-5 pt-4">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <Trophy className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <p className="min-w-0 break-words text-[9px] font-black uppercase leading-tight tracking-[0.24em] text-primary">
+                            {game.competition || 'Jogo'}
+                          </p>
+                        </div>
+                        {game.category && (
+                          <span className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.18em] text-background">
+                            {game.category}
+                          </span>
+                        )}
+                        {onSaveGame && (
+                          <button
+                            type="button"
+                            onClick={() => setFormGame(game)}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/75 transition hover:border-primary hover:bg-primary hover:text-background"
+                            aria-label="Editar jogo"
+                            title="Editar jogo"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
                       </div>
 
-                      <div className="flex flex-1 items-center justify-between gap-2 overflow-hidden">
-                        <div className="min-w-0 text-left">
-                          <p className="truncate text-sm font-black uppercase italic text-white">{fixture.home}</p>
+                      <div className="relative grid grid-cols-[1fr_auto_1fr] items-start gap-3 px-5 pb-5 pt-5">
+                        <div className="flex min-w-0 flex-col items-center gap-2.5 text-center">
+                          <TeamCrest name={game.home} logo={clubLogos.get(game.home.trim().toLowerCase())} />
+                          <p className="w-full break-words text-[13px] font-black uppercase italic leading-tight text-white">{game.home}</p>
+                          <span className="text-[7px] font-black uppercase tracking-[0.26em] text-on-surface-variant">Mandante</span>
                         </div>
 
-                        <div className="flex h-8 min-w-[42px] items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
-                          VS
+                        <div className="flex flex-col items-center pt-2">
+                          <span className="text-2xl font-black italic leading-none tracking-tight text-white">{game.time || '--:--'}</span>
+                          <span className="mt-2 flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.3em] text-on-surface-variant">
+                            <span className="h-px w-3 bg-white/20" />
+                            VS
+                            <span className="h-px w-3 bg-white/20" />
+                          </span>
                         </div>
 
-                        <div className="min-w-0 text-right">
-                          <p className="truncate text-sm font-black uppercase italic text-white">{fixture.away}</p>
+                        <div className="flex min-w-0 flex-col items-center gap-2.5 text-center">
+                          <TeamCrest name={game.away} logo={clubLogos.get(game.away.trim().toLowerCase())} />
+                          <p className="w-full break-words text-[13px] font-black uppercase italic leading-tight text-white">{game.away}</p>
+                          <span className="text-[7px] font-black uppercase tracking-[0.26em] text-on-surface-variant">Visitante</span>
                         </div>
+                      </div>
+
+                      {game.venue && (
+                        <div className="relative flex items-center justify-center gap-2 border-t border-white/[0.06] px-5 py-3 text-[9px] font-black uppercase leading-tight tracking-[0.2em] text-on-surface-variant">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+                          <span className="min-w-0 break-words">{game.venue}</span>
+                        </div>
+                      )}
+
+                      <div className="relative border-t border-white/[0.06] bg-black/20 px-5 pb-5 pt-4">
+                        <div className="mb-3 flex items-center gap-3">
+                          <p className="text-[8px] font-black uppercase tracking-[0.26em] text-on-surface-variant">
+                            {gameAthletes.length === 1 ? 'Atleta em campo' : 'Atletas em campo'}
+                          </p>
+                          <span className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+                        </div>
+                        {gameAthletes.length > 0 ? (
+                          <div className="space-y-2">
+                            {gameAthletes.map((athlete) => (
+                              <button
+                                key={athlete.id}
+                                type="button"
+                                onClick={() => onSelectAthlete?.(athlete)}
+                                className="group flex w-full items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.03] p-2 pr-3 text-left transition hover:border-white/30 hover:bg-white/[0.07]"
+                                title="Abrir perfil"
+                              >
+                                <img src={athlete.image} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover ring-1 ring-white/40 ring-offset-2 ring-offset-[#17191c]" />
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-[11px] font-black uppercase leading-tight tracking-[0.06em] text-white">{fullName(athlete)}</p>
+                                  <p className="mt-1 break-words text-[8px] font-black uppercase leading-tight tracking-[0.18em] text-on-surface-variant">
+                                    {[athlete.position, athlete.category].filter(Boolean).join(' · ')}
+                                  </p>
+                                </div>
+                                <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition group-hover:translate-x-0.5 group-hover:text-white" />
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-white/50">Nenhum atleta vinculado.</p>
+                        )}
                       </div>
                     </div>
-
-                    <div className="space-y-3 border-t border-white/5 pt-4 text-xs font-black uppercase tracking-[0.15em] text-on-surface-variant">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-surface-high/80 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-primary">
-                          <Clock3 className="h-3.5 w-3.5" />
-                          <span>{fixture.time}</span>
-                        </div>
-                        <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-[#2b2d30]/90 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-white/85">
-                          <span className="text-on-surface-variant">Cat.</span>
-                          <span>{fixture.category}</span>
-                        </div>
-                        <div className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-white/10 bg-[#2b2d30]/90 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-primary">
-                          <span className="text-on-surface-variant">Comp.</span>
-                          <span>Liga Regional</span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#2b2d30]/90 px-3 py-2 text-[10px] font-black uppercase tracking-[0.15em] text-on-surface-variant">
-                        <MapPin className="h-3.5 w-3.5 text-primary" />
-                        <span>{fixture.venue}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-surface-high p-6 text-center">
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Sem jogo</p>
@@ -221,6 +524,17 @@ export const CalendarView = () => {
           </motion.aside>
         </div>
       </div>
+
+      {formGame && onSaveGame && (
+        <GameForm
+          game={formGame === 'new' ? undefined : formGame}
+          initialDate={selectedDate}
+          athletes={athletes}
+          onSave={onSaveGame}
+          onDelete={onDeleteGame}
+          onClose={() => setFormGame(null)}
+        />
+      )}
     </div>
   );
 };

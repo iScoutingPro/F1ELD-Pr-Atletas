@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Users, TrendingUp, Search, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck } from 'lucide-react';
+import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck } from 'lucide-react';
 import { Athlete, View } from '../types';
 import { Logo } from '../components/Logo';
 
@@ -30,7 +30,6 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
   const inClubCount = athletes.filter(a => a.status === 'In Club').length;
   const inClubPercentage = totalAthletes > 0 ? Math.round((inClubCount / totalAthletes) * 100) : 0;
   
-  const captadosCount = athletes.filter(a => a.source === 'Captado' || !a.source).length;
   const indicadosCount = athletes.filter(a => a.source === 'Indicado').length;
   const freeCount = totalAthletes - inClubCount;
 
@@ -149,7 +148,6 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
   const statCards = [
     { label: 'Atletas Agenciados', val: totalAthletes.toString(), icon: Users, clickable: true, useLogo: true, targetView: 'athletes' as View },
     { label: 'Atletas Negociados', val: inClubPercentage.toString(), icon: TrendingUp, clickable: true, useBrand: true, targetView: 'negociados' as View },
-    { label: 'Atletas Agenciados + Negociados', val: captadosCount.toString(), icon: Search, clickable: true, useCombo: true, targetView: 'agenciados-negociados' as View },
     { label: 'Atletas Totais', val: indicadosCount.toString(), icon: Users, clickable: true, usePeople: true, targetView: 'atletas-totais' as View }
   ];
 
@@ -163,7 +161,7 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
 
   return (
     <div className="pt-24 pb-32 px-6 max-w-7xl mx-auto">
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {statCards.map((stat, i) => (
           <div 
             key={i} 
@@ -195,16 +193,6 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
                   <span className="hidden text-[7px] font-black uppercase tracking-[0.2em] text-white whitespace-nowrap">
                     Cosmopolitano
                   </span>
-                </div>
-              ) : stat.useCombo ? (
-                <div className="flex items-center justify-center pr-6 translate-y-1.5 gap-2">
-                  <Logo variant="minimal" className="w-16 h-8 opacity-90" />
-                  <div className="h-8 w-px bg-white/40" />
-                  <img
-                    src="/assets/cosmopolitano.png"
-                    alt="Cosmopolitano"
-                    className="h-10 max-w-[110px] object-contain brightness-0 invert opacity-95"
-                  />
                 </div>
               ) : stat.useLogo ? (
                 <div className="translate-y-1.5">

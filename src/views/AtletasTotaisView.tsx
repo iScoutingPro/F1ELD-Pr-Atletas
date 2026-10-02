@@ -1,219 +1,377 @@
-import React, { useState } from 'react';
-import { Search, Users, Shield, Disc, TrendingUp } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useMemo, useState } from 'react';
+import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Search, Shield, Users, Video, X } from 'lucide-react';
+import { motion } from 'motion/react';
 import { Athlete } from '../types';
+import { findCountry } from '../countries';
+import { CountryFlag } from '../components/CountrySelect';
 
 interface AtletasTotaisViewProps {
   athletes: Athlete[];
   onSelectAthlete?: (athlete: Athlete) => void;
 }
 
+type ListType = 'agenciados' | 'negociados';
+type ListFilter = 'todos' | ListType | 'ambos';
+
+// Um cartão da tela: o atleta e as listas em que ele aparece
+interface Entry {
+  athlete: Athlete;
+  lists: ListType[];
+}
+
+const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_30px_80px_-40px_rgba(0,0,0,0.9)]';
+const labelClass = 'text-[9px] font-black uppercase tracking-[0.24em] text-on-surface-variant/70';
+const fieldClass = 'w-full rounded-2xl border border-white/10 bg-black/30 text-xs font-bold text-on-surface outline-none transition focus:border-primary/60 focus:bg-black/40';
+
+const LIST_FILTERS: { id: ListFilter; label: string }[] = [
+  { id: 'todos', label: 'Todos' },
+  { id: 'agenciados', label: 'Agenciados' },
+  { id: 'negociados', label: 'Negociados' },
+  { id: 'ambos', label: 'Os dois' },
+];
+
+const formatDate = (value?: string) => {
+  if (!value) return '';
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+};
+
+const isExpired = (value?: string) => {
+  const time = value ? new Date(`${value.slice(0, 10)}T00:00:00`).getTime() : NaN;
+  return !Number.isNaN(time) && time < Date.now();
+};
+
+const listOf = (athlete: Athlete): ListType => athlete.listType || 'agenciados';
+const inBoth = (entry: Entry) => entry.lists.length > 1;
+const matchesList = (entry: Entry, filter: ListFilter) =>
+  filter === 'todos' || (filter === 'ambos' ? inBoth(entry) : entry.lists.includes(filter));
+const listLabel = (entry: Entry) =>
+  inBoth(entry) ? 'Agenciado + Negociado' : entry.lists[0] === 'negociados' ? 'Negociado' : 'Agenciado';
+const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
+const clubOf = (athlete: Athlete) =>
+  athlete.club && athlete.club !== 'None' && athlete.club !== 'Livre no Mercado' ? athlete.club : 'Sem Clube';
+
+// Profissional primeiro, depois Sub-20, Sub-17... em ordem decrescente
+const categoryRank = (category: string) => {
+  const match = /(\d+)/.exec(category);
+  return match ? 100 - Number(match[1]) : -1;
+};
+
+// As listas são independentes no banco: o mesmo atleta cadastrado nas duas (mesmo nome completo
+// e mesma data de nascimento) vira um cartão só, com o cadastro de Agenciados como principal
+const buildEntries = (athletes: Athlete[]): Entry[] => {
+  const groups = new Map<string, Athlete[]>();
+  athletes.forEach(athlete => {
+    const key = `${fullName(athlete).toLowerCase().replace(/\s+/g, ' ')}|${(athlete.birthDate || '').slice(0, 10)}`;
+    groups.set(key, [...(groups.get(key) || []), athlete]);
+  });
+
+  const entries: Entry[] = [];
+  groups.forEach(group => {
+    const agenciado = group.find(a => listOf(a) === 'agenciados');
+    const negociado = group.find(a => listOf(a) === 'negociados');
+    if (agenciado && negociado) {
+      entries.push({ athlete: agenciado, lists: ['agenciados', 'negociados'] });
+    } else {
+      group.forEach(athlete => entries.push({ athlete, lists: [listOf(athlete)] }));
+    }
+  });
+  return entries;
+};
+
+const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
+
+const FilterSelect = ({ value, onChange, placeholder, options }: { value: string; onChange: (value: string) => void; placeholder: string; options: string[] }) => (
+  <div className="relative">
+    <select value={value} onChange={(e) => onChange(e.target.value)} className={`${fieldClass} appearance-none py-3.5 pl-4 pr-10`}>
+      <option value="" className="bg-surface-high">{placeholder}</option>
+      {options.map(option => (
+        <option key={option} value={option} className="bg-surface-high">{option}</option>
+      ))}
+    </select>
+    <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+  </div>
+);
+
+const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; label: string; muted?: boolean; children: React.ReactNode }) => (
+  <div className="min-w-0">
+    <p className={`${labelClass} flex items-center gap-1.5`}>
+      <Icon className="h-3 w-3 shrink-0" />
+      {label}
+    </p>
+    <div className={`mt-1 flex min-w-0 items-center gap-1.5 text-[13px] font-bold ${muted ? 'text-on-surface-variant/45' : 'text-on-surface'}`}>
+      {children}
+    </div>
+  </div>
+);
+
+const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: Athlete) => void }> = ({ entry, index, onSelect }) => {
+  const { athlete } = entry;
+  const country = findCountry(athlete.nacionalidade);
+  const secondCountry = athlete.hasDualNationality ? findCountry(athlete.secondNationality) : undefined;
+  const club = clubOf(athlete);
+  const expired = isExpired(athlete.contractEnd);
+  const contractEnd = formatDate(athlete.contractEnd);
+  const hasContract = !!(athlete.contractLevel || athlete.contractType);
+
+  const stats = [
+    { label: 'Idade', value: athlete.age ? String(athlete.age) : '', unit: 'anos' },
+    { label: 'Altura', value: athlete.height ? (athlete.height / 100).toFixed(2).replace('.', ',') : '', unit: 'm' },
+    { label: 'Peso', value: athlete.weight ? String(athlete.weight).replace('.', ',') : '', unit: 'kg' },
+    { label: 'Pé', value: athlete.preferredFoot || '', unit: '' },
+  ];
+
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, delay: Math.min(index, 10) * 0.04, ease: [0.22, 1, 0.36, 1] }}
+      onClick={() => onSelect?.(athlete)}
+      className={`${panelClass} group relative flex w-full overflow-hidden text-left transition duration-500 hover:-translate-y-1 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_40px_90px_-40px_rgba(255,255,255,0.22)]`}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
+      <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/[0.05] blur-3xl transition duration-500 group-hover:bg-white/[0.09]" />
+
+      <div className="relative w-28 shrink-0 self-stretch overflow-hidden bg-surface-high sm:w-36">
+        {athlete.image ? (
+          <img
+            src={athlete.image}
+            alt={athlete.name}
+            className="absolute inset-0 h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-b from-white/[0.08] to-transparent text-6xl font-black italic text-white/15">
+            {athlete.name.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-white/10" />
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-3">
+          <span className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-white">{athlete.category || 'Sem categoria'}</span>
+          <div className="flex shrink-0 items-center gap-1">
+            {country && <CountryFlag country={country} className="h-3.5 w-5 ring-1 ring-white/20" />}
+            {secondCountry && <CountryFlag country={secondCountry} className="h-3.5 w-5 ring-1 ring-white/20" />}
+          </div>
+        </div>
+      </div>
+
+      <div className="relative min-w-0 flex-1 p-5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="truncate rounded-full bg-primary px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
+            {listLabel(entry)}
+          </span>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-background">
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </span>
+        </div>
+
+        <h3 className="mt-3 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
+          <span className="block truncate">{athlete.name}</span>
+          {athlete.lastName && (
+            <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
+          )}
+        </h3>
+        <p className="mt-2 truncate text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
+          <span className="text-primary">{athlete.position || 'Sem posição'}</span>
+          {athlete.secondaryPosition && <span> · {athlete.secondaryPosition}</span>}
+        </p>
+
+        <div className="mt-4 grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-3">
+          {stats.map(({ label, value, unit }) => (
+            <div key={label} className="min-w-0 px-2 text-center first:pl-0 last:pr-0">
+              <p className="truncate text-base font-black italic leading-none tracking-tight text-white">
+                {value || <span className="text-on-surface-variant/30">—</span>}
+                {value && unit && <span className="ml-0.5 text-[8px] font-black uppercase not-italic tracking-[0.1em] text-on-surface-variant">{unit}</span>}
+              </p>
+              <p className={`${labelClass} mt-1`}>{label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+          <Detail icon={Shield} label="Clube Atual">
+            {athlete.clubLogo && <img src={athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
+            <span className="truncate">{club}</span>
+          </Detail>
+          <Detail icon={MapPin} label="Cidade/Estado" muted={!athlete.naturalidade}>
+            <span className="truncate">{athlete.naturalidade || 'Não informado'}</span>
+          </Detail>
+          <Detail icon={FileText} label="Contrato" muted={!hasContract}>
+            <span className="truncate">
+              {athlete.contractLevel || (athlete.contractType ? 'Cadastrado' : 'Sem contrato')}
+              {contractEnd && (
+                <span className={`ml-1.5 text-[11px] ${expired ? 'text-error' : 'text-on-surface-variant'}`}>
+                  · {expired ? 'encerrado em' : 'até'} {contractEnd}
+                </span>
+              )}
+            </span>
+          </Detail>
+          <Detail icon={Video} label="DVD">
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${athlete.hasDvd ? 'bg-primary shadow-[0_0_8px_rgba(255,255,255,0.8)]' : 'bg-error'}`} />
+            <span className={`truncate ${athlete.hasDvd ? '' : 'text-error'}`}>{athlete.hasDvd ? 'Possui DVD' : 'Não possui'}</span>
+          </Detail>
+        </div>
+      </div>
+    </motion.button>
+  );
+};
+
 export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisViewProps) => {
   const [search, setSearch] = useState('');
-  const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [listFilter, setListFilter] = useState<ListFilter>('todos');
+  const [category, setCategory] = useState('');
+  const [position, setPosition] = useState('');
 
-  const suggestions = athletes.filter((athlete) =>
-    `${athlete.name} ${athlete.lastName}`.toLowerCase().includes(search.toLowerCase()) &&
-    search.length > 0
+  const categories = useMemo(
+    () => unique(athletes.map(a => a.category)).sort((a, b) => categoryRank(a) - categoryRank(b)),
+    [athletes]
+  );
+  const positions = useMemo(
+    () => unique(athletes.map(a => a.position)).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+    [athletes]
   );
 
-  const selectAthlete = (athlete: Athlete) => {
-    setSearch(`${athlete.name} ${athlete.lastName}`);
-    setSelectedAthlete(athlete);
-    setShowSuggestions(false);
-    if (onSelectAthlete) {
-      onSelectAthlete(athlete);
-    }
-  };
+  const entries = useMemo(() => buildEntries(athletes), [athletes]);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!search.trim()) {
-      setSelectedAthlete(null);
-      return;
-    }
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return entries
+      .filter(entry => {
+        const { athlete } = entry;
+        return matchesList(entry, listFilter) &&
+          (!category || athlete.category === category) &&
+          (!position || athlete.position === position) &&
+          (!term || fullName(athlete).toLowerCase().includes(term) || clubOf(athlete).toLowerCase().includes(term));
+      })
+      .sort((a, b) => fullName(a.athlete).localeCompare(fullName(b.athlete), 'pt-BR'));
+  }, [entries, search, listFilter, category, position]);
 
-    const found = athletes.find(
-      (athlete) => `${athlete.name} ${athlete.lastName}`.toLowerCase() === search.toLowerCase()
-    );
+  const summary = [
+    { label: 'Atletas', value: entries.length },
+    { label: 'Agenciados', value: entries.filter(e => e.lists.includes('agenciados')).length },
+    { label: 'Negociados', value: entries.filter(e => e.lists.includes('negociados')).length },
+    { label: 'Os dois', value: entries.filter(inBoth).length },
+    { label: 'Com DVD', value: entries.filter(e => e.athlete.hasDvd).length },
+  ];
 
-    if (found) {
-      setSelectedAthlete(found);
-      setShowSuggestions(false);
-    }
-  };
-
-  const totalAthletes = athletes.length || 1;
-  const avgTactical = Math.round(
-    athletes.reduce((acc, athlete) => acc + athlete.stats.tactical, 0) / totalAthletes
-  );
-  const avgPhysical = Math.round(
-    athletes.reduce((acc, athlete) => acc + athlete.stats.physical, 0) / totalAthletes
-  );
-  const avgTechnical = Math.round(
-    athletes.reduce((acc, athlete) => acc + athlete.stats.technical, 0) / totalAthletes
-  );
-
-  const displayData = selectedAthlete ? {
-    name: selectedAthlete.name,
-    lastName: selectedAthlete.lastName,
-    category: selectedAthlete.category,
-    position: selectedAthlete.position,
-    stats: selectedAthlete.stats,
-    isAggregate: false,
-  } : {
-    name: 'ATLETAS',
-    lastName: 'TOTAIS',
-    category: 'PORTFÓLIO COMPLETO',
-    position: 'MÉDIA GLOBAL',
-    stats: { tactical: avgTactical, physical: avgPhysical, technical: avgTechnical },
-    isAggregate: true,
+  const hasFilters = !!search || listFilter !== 'todos' || !!category || !!position;
+  const clearFilters = () => {
+    setSearch('');
+    setListFilter('todos');
+    setCategory('');
+    setPosition('');
   };
 
   return (
-    <div className="pt-24 pb-32 px-6 max-w-7xl mx-auto space-y-12">
-      <section className="max-w-2xl mx-auto relative">
-        <form onSubmit={handleSearch} className="relative group z-[70]">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant group-focus-within:text-primary transition-colors" />
+    <div className="mx-auto max-w-7xl space-y-6 px-6 pb-32 pt-24">
+      <motion.section
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+        className={`${panelClass} relative overflow-hidden`}
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
+        <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-white/[0.09] blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-40 -left-24 h-72 w-72 rounded-full bg-white/[0.04] blur-3xl" />
+
+        <div className="relative flex flex-wrap items-end justify-between gap-4 px-6 py-5 sm:px-8">
+          <div>
+            <p className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.34em] text-on-surface-variant">
+              <span className="h-px w-6 bg-primary" />
+              Carteira completa
+            </p>
+            <h2 className="mt-2 text-3xl font-black uppercase italic leading-none tracking-tighter text-white md:text-4xl">
+              Atletas{' '}
+              <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">Totais</span>
+            </h2>
+          </div>
+          <div className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant backdrop-blur">
+            Exibindo <span className="text-primary">{filtered.length}</span> de {entries.length}
+          </div>
+        </div>
+
+        <div className="relative grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-5">
+          {summary.map(({ label, value }, index) => (
+            <div key={label} className={`bg-background/80 px-6 py-3.5 backdrop-blur sm:px-8 ${index === 0 ? 'col-span-2 sm:col-span-1' : ''}`}>
+              <p className="text-2xl font-black italic leading-none tracking-tighter text-white">
+                {String(value).padStart(2, '0')}
+              </p>
+              <p className={`${labelClass} mt-1`}>{label}</p>
+            </div>
+          ))}
+        </div>
+      </motion.section>
+
+      <section className={`${panelClass} space-y-3 p-3 sm:p-4`}>
+        <div className="relative">
+          <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
           <input
             type="text"
             value={search}
-            onFocus={() => setShowSuggestions(true)}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setShowSuggestions(true);
-              if (!e.target.value) setSelectedAthlete(null);
-            }}
-            placeholder="Pesquisar atleta total..."
-            className="w-full bg-surface-low border border-white/5 text-white pl-16 pr-6 py-6 rounded-2xl text-sm focus:ring-2 focus:ring-primary focus:bg-surface-high transition-all outline-none italic uppercase font-black tracking-widest"
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nome ou clube..."
+            className={`${fieldClass} py-4 pl-12 pr-12 text-sm text-white placeholder:text-on-surface-variant/50`}
           />
           {search && (
             <button
               type="button"
-              onClick={() => { setSearch(''); setSelectedAthlete(null); setShowSuggestions(false); }}
-              className="absolute right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-primary uppercase tracking-widest"
+              onClick={() => setSearch('')}
+              aria-label="Limpar busca"
+              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-on-surface-variant transition hover:text-primary"
             >
-              Limpar
+              <X className="h-4 w-4" />
             </button>
           )}
-        </form>
-
-        <AnimatePresence>
-          {showSuggestions && search.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="absolute top-full left-0 w-full mt-2 bg-surface-high border border-white/10 rounded-2xl overflow-hidden z-[70] shadow-2xl"
-            >
-              {suggestions.length > 0 ? (
-                suggestions.map((athlete) => (
-                  <button
-                    key={athlete.id}
-                    onClick={() => selectAthlete(athlete)}
-                    className="w-full px-6 py-4 flex items-center gap-4 hover:bg-white/5 transition-colors text-left border-b border-white/5 last:border-none"
-                  >
-                    <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10">
-                      <img src={athlete.image} alt={athlete.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-black text-white uppercase italic">{athlete.name} {athlete.lastName}</div>
-                      <div className="flex items-center gap-2">
-                        {athlete.clubLogo && (
-                          <img src={athlete.clubLogo} alt={athlete.club} className="w-3 h-3 object-contain" referrerPolicy="no-referrer" />
-                        )}
-                        <div className="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest">{athlete.position} • {athlete.category}</div>
-                      </div>
-                    </div>
-                    <div className="ml-auto">
-                      {athlete.hasDvd ? <Disc className="w-4 h-4 text-primary" /> : <Disc className="w-4 h-4 text-white/10" />}
-                    </div>
-                  </button>
-                ))
-              ) : (
-                <div className="px-6 py-8 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant italic">
-                    Nenhum atleta encontrado
-                  </p>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
-
-      <section className="relative">
-        <div className="absolute -left-4 top-0 w-1 h-24 bg-primary opacity-20" />
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant mb-2">
-          {displayData.isAggregate ? 'Visão consolidada' : 'Análise individual'}
-        </p>
-        <h2 className="text-6xl md:text-8xl font-black tracking-tighter leading-none mb-4 text-white italic uppercase">
-          {displayData.name}<br /><span className="opacity-40">{displayData.lastName}</span>
-        </h2>
-        <div className="flex gap-4 items-center">
-          <span className="px-3 py-1 bg-surface-high text-[10px] font-black uppercase tracking-widest text-primary rounded">{displayData.position}</span>
-          <span className="px-3 py-1 bg-surface-high text-[10px] font-black uppercase tracking-widest text-on-surface-variant rounded">{displayData.category}</span>
         </div>
-      </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 bg-surface-low p-8 rounded-3xl border border-white/5">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-8 flex items-center gap-2">
-            <div className="w-2 h-2 bg-primary" /> Métricas gerais
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-            {[
-              { label: 'Tática', val: displayData.stats.tactical },
-              { label: 'Física', val: displayData.stats.physical },
-              { label: 'Técnica', val: displayData.stats.technical },
-            ].map((item, index) => (
-              <div key={index} className="space-y-2">
-                <div className="text-5xl font-black tracking-tighter text-white italic">{item.val}</div>
-                <div className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest">{item.label}</div>
-                <div className="h-1 w-full bg-surface-highest rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${item.val}%` }} className="h-full bg-primary" />
-                </div>
-              </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[auto_1fr_1fr]">
+          <div className="flex overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-1">
+            {LIST_FILTERS.map(({ id, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setListFilter(id)}
+                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] transition duration-300 ${listFilter === id ? 'bg-primary text-background shadow-[0_8px_24px_-8px_rgba(255,255,255,0.6)]' : 'text-on-surface-variant hover:text-white'}`}
+              >
+                {label}
+              </button>
             ))}
           </div>
+          <FilterSelect value={category} onChange={setCategory} placeholder="Todas as categorias" options={categories} />
+          <FilterSelect value={position} onChange={setPosition} placeholder="Todas as posições" options={positions} />
         </div>
+      </section>
 
-        <div className="bg-surface-high p-8 rounded-3xl flex flex-col justify-between border border-white/10">
+      {filtered.length > 0 ? (
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {filtered.map((entry, index) => (
+            <AthleteCard key={entry.athlete.id} entry={entry} index={index} onSelect={onSelectAthlete} />
+          ))}
+        </section>
+      ) : (
+        <section className={`${panelClass} flex flex-col items-center gap-4 px-6 py-20 text-center`}>
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-black/30">
+            <Users className="h-6 w-6 text-on-surface-variant" />
+          </div>
           <div>
-            <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant mb-6">Resumo</h3>
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-3xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <Users className="w-10 h-10 text-primary" />
-              </div>
-              <div>
-                <div className="text-2xl font-black italic uppercase leading-none text-primary">TOTAL</div>
-                <div className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mt-1">Base completa</div>
-              </div>
-            </div>
+            <p className="text-lg font-black uppercase italic tracking-tight text-white">Nenhum atleta encontrado</p>
+            <p className="mt-1 text-sm font-bold text-on-surface-variant">
+              {hasFilters ? 'Ajuste a busca ou os filtros para ver outros atletas.' : 'Ainda não há atletas cadastrados.'}
+            </p>
           </div>
-          <div className="pt-6 border-t border-white/10">
-            <p className="text-sm text-on-surface-variant leading-relaxed italic">Painel geral da carteira completa de atletas do sistema.</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: 'Atletas', val: athletes.length.toString(), icon: Users },
-          { label: 'Condição', val: '100%', icon: Shield },
-          { label: 'Cobertura', val: '94%', icon: TrendingUp },
-          { label: 'DVD', val: '28', icon: Disc },
-        ].map((stat, index) => (
-          <div key={index} className="bg-surface-low p-6 rounded-2xl border border-white/5">
-            <div className="flex justify-between items-center mb-4">
-              <stat.icon className="w-5 h-5 text-on-surface-variant" />
-              <span className="text-2xl font-black text-white italic">{stat.val}</span>
-            </div>
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">{stat.label}</h4>
-          </div>
-        ))}
-      </section>
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-full bg-primary px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </section>
+      )}
     </div>
   );
 };

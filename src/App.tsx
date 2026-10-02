@@ -5,18 +5,18 @@ import { motion, AnimatePresence } from 'motion/react';
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { MOCK_ATHLETES } from './data';
-import { Athlete, View } from './types';
+import { Athlete, Game, View } from './types';
 
 // Imports from Components
 import { TopAppBar } from './components/TopAppBar';
 import { BottomNavBar } from './components/BottomNavBar';
 import { AthleteInfo } from './components/AthleteInfo';
+import { AthleteGames } from './components/AthleteGames';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { ScoutView } from './views/ScoutView';
-import { NegociadosView } from './views/NegociadosView';
 import { AgenciadosNegociadosView } from './views/AgenciadosNegociadosView';
 import { AtletasTotaisView } from './views/AtletasTotaisView';
 import { AthletesListView } from './views/AthletesListView';
@@ -34,9 +34,38 @@ const MISSING_COLUMN_CODE = 'PGRST204';
 
 type Notice = { title: string; message: string };
 
-const notAllowedMessage = (action: string): Notice => ({
+const notAllowedMessage = (action: string, target = 'atletas'): Notice => ({
   title: 'Ação não permitida',
-  message: `Seu usuário não tem permissão para ${action} atletas. Nenhuma alteração foi salva.`,
+  message: `Seu usuário não tem permissão para ${action} ${target}. Nenhuma alteração foi salva.`,
+});
+
+// Tabela games ausente (supabase/games.sql ainda não foi executado)
+const MISSING_TABLE_CODES = ['PGRST205', '42P01', MISSING_COLUMN_CODE];
+const gameErrorNotice = (title: string, error: { code?: string; message: string }): Notice => {
+  // O mesmo código 42501 vem quando falta o grant da tabela (não é falta de permissão do usuário)
+  const missingGrant = /permission denied for table/i.test(error.message);
+  if (error.code === RLS_VIOLATION_CODE && !missingGrant) {
+    return notAllowedMessage('alterar', 'jogos');
+  }
+  if (missingGrant || (error.code && MISSING_TABLE_CODES.includes(error.code))) {
+    return {
+      title: 'Calendário não configurado',
+      message: 'O banco de dados ainda não está preparado para os jogos. Execute o arquivo supabase/games.sql no SQL Editor do Supabase e tente de novo.',
+    };
+  }
+  return { title, message: error.message };
+};
+
+const mapGameRow = (g: any): Game => ({
+  id: g.id,
+  date: g.game_date,
+  time: g.game_time || undefined,
+  home: g.home,
+  away: g.away,
+  venue: g.venue || undefined,
+  category: g.category || undefined,
+  competition: g.competition || undefined,
+  athleteIds: g.athlete_ids || [],
 });
 
 // Traduz o erro do Supabase para um aviso legível na interface
@@ -50,8 +79,16 @@ const errorNotice = (title: string, error: { code?: string; message: string }): 
   return { title, message: error.message };
 };
 
+// Atleta sem clube aparece como "Sem Clube" (registros antigos gravaram "Livre no Mercado" ou "None")
+const NO_CLUB = 'Sem Clube';
+const clubName = (club?: string | null) => {
+  const name = (club || '').trim();
+  return !name || name === 'Livre no Mercado' || name === 'None' ? NO_CLUB : name;
+};
+
 const mapAthleteRow = (a: any): Athlete => ({
   ...a,
+  club: clubName(a.club),
   lastName: a.last_name,
   secondaryPosition: a.secondary_position,
   clubLogo: a.club_logo,
@@ -74,6 +111,7 @@ const mapAthleteRow = (a: any): Athlete => ({
   contractEnd: a.contract_end,
   contractLink: a.contract_link,
   source: a.source || 'Captado',
+  listType: a.list_type || 'agenciados',
 });
 
 export default function App() {
@@ -86,6 +124,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
+  const [games, setGames] = useState<Game[]>([]);
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -99,6 +138,7 @@ export default function App() {
     setSelectedAthlete(null);
     setIsAddingAthlete(false);
     setActivities([]);
+    setGames([]);
     setView('login');
   };
 
@@ -369,7 +409,17 @@ export default function App() {
       fetchActivities();
     };
 
+    const fetchGames = async () => {
+      const { data, error } = await supabase.from('games').select('*');
+      if (error) {
+        console.error('Erro ao carregar jogos:', error);
+      } else if (data) {
+        setGames(data.map(mapGameRow));
+      }
+    };
+
     fetchAthletes();
+    fetchGames();
   }, [session]);
 
   const recordActivity = async (activity: any) => {
@@ -389,6 +439,9 @@ export default function App() {
       console.error('Erro ao gravar atividade:', err);
     }
   };
+
+  // Depois de salvar ou apagar, quem está em Atletas Negociados continua nessa aba
+  const returnToList = () => setView(prev => (prev === 'negociados' ? prev : 'athletes'));
 
   const handleSaveAthlete = async (athleteData: Partial<Athlete>) => {
     if (!isAdmin) {
@@ -410,6 +463,9 @@ export default function App() {
       return;
     }
 
+    // Cada atleta pertence a uma só lista: na edição mantém a dele, no cadastro entra na aba aberta
+    const listType = selectedAthlete?.listType ?? (view === 'negociados' ? 'negociados' : 'agenciados');
+
     if (!hasSupabaseConfig || !supabase) {
       const nextAthlete: Athlete = {
         id: `local-${Date.now()}`,
@@ -418,7 +474,7 @@ export default function App() {
         position: athleteData.position || 'Meia',
         secondaryPosition: athleteData.secondaryPosition,
         category: athleteData.category || 'Sub-20',
-        club: athleteData.club || 'Livre no Mercado',
+        club: clubName(athleteData.club),
         clubLogo: athleteData.clubLogo,
         status: 'Livre no Mercado',
         rating: athleteData.rating || 'A',
@@ -448,6 +504,7 @@ export default function App() {
         hasDvd: athleteData.hasDvd,
         dvdLink: athleteData.dvdLink,
         source: athleteData.source || 'Captado',
+        listType,
         stats: athleteData.stats || { tactical: 70, physical: 70, technical: 70 },
       };
 
@@ -457,7 +514,7 @@ export default function App() {
       });
       setSelectedAthlete(null);
       setIsAddingAthlete(false);
-      setView('athletes');
+      returnToList();
       return;
     }
 
@@ -470,9 +527,9 @@ export default function App() {
       position: athleteData.position || 'Meia',
       secondary_position: athleteData.secondaryPosition,
       category: athleteData.category || 'Sub-20',
-      club: athleteData.club || 'Livre no Mercado',
+      club: clubName(athleteData.club),
       club_logo: athleteData.clubLogo,
-      status: (athleteData.club && athleteData.club !== 'Livre no Mercado' && athleteData.club !== 'None') ? 'In Club' : 'Livre no Mercado',
+      status: clubName(athleteData.club) !== NO_CLUB ? 'In Club' : 'Livre no Mercado',
       rating: athleteData.rating || 'A',
       image: athleteData.image || 'https://picsum.photos/seed/new_athlete/300/300',
       naturalidade: athleteData.naturalidade,
@@ -500,6 +557,7 @@ export default function App() {
       has_dvd: athleteData.hasDvd,
       dvd_link: athleteData.dvdLink,
       source: athleteData.source || 'Captado',
+      list_type: listType,
       stats: athleteData.stats || { tactical: 70, physical: 70, technical: 70 }
     };
 
@@ -547,7 +605,7 @@ export default function App() {
       if (!error && insertedData?.[0]) {
         recordActivity({
           type: 'CONTRATO',
-          title: 'NOVO ATLETA AGENCIADO',
+          title: listType === 'negociados' ? 'NOVO ATLETA NEGOCIADO' : 'NOVO ATLETA AGENCIADO',
           subtitle: `${athleteData.name} ${athleteData.lastName}`.toUpperCase(),
           club: payload.club,
           club_logo: payload.club_logo,
@@ -574,7 +632,7 @@ export default function App() {
       } else if (data) {
         setAthletes(data.map(mapAthleteRow));
       }
-      setView('athletes');
+      returnToList();
     }
     
     setLoading(false);
@@ -590,7 +648,7 @@ export default function App() {
       setAthletes(prev => prev.filter(a => a.id !== id));
       setSelectedAthlete(null);
       setIsAddingAthlete(false);
-      setView('athletes');
+      returnToList();
       return;
     }
 
@@ -624,7 +682,7 @@ export default function App() {
     setAthletes(prev => prev.filter(a => a.id !== id));
     setSelectedAthlete(null);
     setIsAddingAthlete(false);
-    setView('athletes');
+    returnToList();
 
     if (isUuid) {
       const { data } = await supabase.from('athletes').select('*');
@@ -634,6 +692,90 @@ export default function App() {
     }
     
     setLoading(false);
+  };
+
+  // Devolve true quando o jogo foi gravado, para o formulário do calendário saber se pode fechar
+  const handleSaveGame = async (gameData: Omit<Game, 'id'>, id?: string): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage(id ? 'editar' : 'cadastrar', 'jogos'));
+      return false;
+    }
+
+    const missingFields = [
+      !gameData.date && 'Data',
+      !gameData.home.trim() && 'Mandante',
+      !gameData.away.trim() && 'Visitante',
+    ].filter(Boolean);
+    if (missingFields.length > 0) {
+      setNotice({
+        title: 'Campos obrigatórios não preenchidos',
+        message: `Preencha para salvar o jogo: ${missingFields.join(', ')}.`,
+      });
+      return false;
+    }
+
+    if (!hasSupabaseConfig || !supabase) {
+      const nextGame: Game = { ...gameData, id: id || `local-${Date.now()}` };
+      setGames(prev => [nextGame, ...prev.filter(g => g.id !== nextGame.id)]);
+      return true;
+    }
+
+    const payload = {
+      game_date: gameData.date,
+      game_time: gameData.time || null,
+      home: gameData.home.trim(),
+      away: gameData.away.trim(),
+      venue: gameData.venue?.trim() || null,
+      category: gameData.category || null,
+      competition: gameData.competition?.trim() || null,
+      athlete_ids: gameData.athleteIds,
+    };
+
+    const { data, error } = id
+      ? await supabase.from('games').update(payload).eq('id', id).select()
+      : await supabase.from('games').insert([payload]).select();
+
+    if (error) {
+      console.error('Erro ao salvar jogo:', error);
+      setNotice(gameErrorNotice('Erro ao salvar jogo', error));
+      return false;
+    }
+
+    // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+    if (!data || data.length === 0) {
+      setNotice(notAllowedMessage(id ? 'editar' : 'cadastrar', 'jogos'));
+      return false;
+    }
+
+    const savedGame = mapGameRow(data[0]);
+    setGames(prev => [savedGame, ...prev.filter(g => g.id !== savedGame.id)]);
+    return true;
+  };
+
+  const handleDeleteGame = async (id: string): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('excluir', 'jogos'));
+      return false;
+    }
+
+    if (hasSupabaseConfig && supabase && !id.startsWith('local-')) {
+      const { data, error } = await supabase.from('games').delete().eq('id', id).select();
+
+      if (error) {
+        console.error('Erro ao apagar jogo:', error);
+        setNotice(gameErrorNotice('Erro ao apagar jogo', error));
+        return false;
+      }
+
+      // RLS bloqueia o delete sem retornar erro: nenhuma linha é apagada
+      if (!data || data.length === 0) {
+        setNotice(notAllowedMessage('excluir', 'jogos'));
+        return false;
+      }
+    }
+
+    setGames(prev => prev.filter(g => g.id !== id));
+    return true;
   };
 
   const openEditAthlete = () => {
@@ -687,16 +829,32 @@ export default function App() {
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
       case 'dashboard': return <DashboardView athletes={athletes} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} />;
-      case 'athletes': return <AthletesListView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
+      case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
-      case 'negociados': return <NegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
+      case 'negociados': return (
+        <AthletesListView
+          athletes={athletes.filter(a => a.listType === 'negociados')}
+          onSelectAthlete={openAthleteProfile}
+          onAddAthlete={isAdmin ? openAddAthlete : undefined}
+          title="Atletas Negociados"
+          subtitle="lista independente dos agenciados"
+        />
+      );
       case 'agenciados-negociados': return <AgenciadosNegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'atletas-totais': return <AtletasTotaisView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'sessions': return <SessionsView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'settings': return <SettingsView onLogout={confirmLogout} />;
       case 'security': return <SecurityView onComplete={handlePasswordUpdate} />;
       case 'success': return <SuccessView onBack={() => setView('login')} />;
-      case 'calendar': return <CalendarView />;
+      case 'calendar': return (
+        <CalendarView
+          games={games}
+          athletes={athletes}
+          onSelectAthlete={openAthleteProfile}
+          onSaveGame={isAdmin ? handleSaveGame : undefined}
+          onDeleteGame={isAdmin ? handleDeleteGame : undefined}
+        />
+      );
       default: return <DashboardView athletes={athletes} />;
     }
   };
@@ -792,8 +950,9 @@ export default function App() {
                       <button
                         key={key}
                         type="button"
-                        onClick={() => setProfileDetailView(key as 'documents' | 'calendar' | 'business' | 'profile' | 'status')}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/5 bg-white/[0.04] text-white/75 transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)]"
+                        // Clicar de novo no ícone da Agenda volta para as informações do perfil
+                        onClick={() => setProfileDetailView(prev => (key === 'calendar' && prev === 'calendar' ? null : key as 'documents' | 'calendar' | 'business' | 'profile' | 'status'))}
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${key === 'calendar' && profileDetailView === 'calendar' ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >
@@ -811,7 +970,11 @@ export default function App() {
                 onChange={handleAthleteImageChange}
                 className="hidden"
               />
-              <AthleteInfo athlete={selectedAthlete} />
+              {profileDetailView === 'calendar' ? (
+                <AthleteGames athlete={selectedAthlete} games={games} />
+              ) : (
+                <AthleteInfo athlete={selectedAthlete} />
+              )}
             </div>
           </div>
         </div>

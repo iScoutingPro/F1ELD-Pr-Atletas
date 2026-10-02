@@ -3,16 +3,18 @@ import { Search, Plus, Filter, MoreVertical, Disc } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Athlete } from '../types';
 
-const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-13', 'Sub-11'];
+const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 const POSITIONS = ['Goleiro', 'Lateral Esquerdo', 'Lateral Direito', 'Zagueiro', 'Volante', 'Meia', 'Extremo', 'Centroavante'];
 
 interface AthletesListViewProps {
   athletes: Athlete[];
   onSelectAthlete: (athlete: Athlete) => void;
   onAddAthlete?: () => void;
+  title?: string;
+  subtitle?: string;
 }
 
-export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete }: AthletesListViewProps) => {
+export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, title = 'Atletas Agenciados', subtitle = 'com atletas captados' }: AthletesListViewProps) => {
   const [nameSearch, setNameSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
   const [positionSearch, setPositionSearch] = useState('');
@@ -50,8 +52,8 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete }: At
     <div className="pt-24 pb-32 px-6 max-w-5xl mx-auto space-y-8">
       <div className="flex items-end justify-between">
         <div className="border-l-4 border-primary pl-4">
-          <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">Atletas Agenciados</h2>
-          <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">com atletas captados</span>
+          <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>
+          <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">{subtitle}</span>
         </div>
         {onAddAthlete && (
           <button onClick={onAddAthlete} className="p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
@@ -179,7 +181,7 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete }: At
                   ) : (
                     <div className={`w-1.5 h-1.5 rounded-full ${athlete.status === 'In Club' ? 'bg-primary' : 'bg-error'}`} />
                   )}
-                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{athlete.club !== 'None' ? athlete.club : 'Livre no Mercado'}</span>
+                  <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">{athlete.club && athlete.club !== 'None' && athlete.club !== 'Livre no Mercado' ? athlete.club : 'Sem Clube'}</span>
                 </div>
                 <MoreVertical className="w-4 h-4 text-white/20 group-hover:text-white transition-colors" />
               </div>

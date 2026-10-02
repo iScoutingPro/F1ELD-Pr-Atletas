@@ -26,8 +26,8 @@ const labelClass = 'text-[9px] font-black uppercase tracking-[0.22em] text-on-su
 
 const SectionTitle = ({ children }: { children: React.ReactNode }) => (
   <div className="flex items-center gap-3">
-    <span className="h-3 w-0.5 rounded-full bg-primary" />
-    <p className="text-[10px] font-black uppercase tracking-[0.28em] text-on-surface">{children}</p>
+    <span className="h-4 w-0.5 rounded-full bg-primary" />
+    <h3 className="text-base font-black uppercase tracking-[0.12em] text-primary underline decoration-2 underline-offset-8">{children}</h3>
     <span className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
   </div>
 );
@@ -203,7 +203,7 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
           <ContactCard label="WhatsApp Responsável" phone={athlete.whatsappGuardian} />
         </div>
 
-        {athlete.hasAgent ? (
+        {athlete.hasAgent && (
           <div className={`${panelClass} relative overflow-hidden p-6`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
             <div className="flex flex-wrap items-center justify-between gap-4">
@@ -235,13 +235,6 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
                 <p className="text-sm font-bold text-on-surface-variant/50">WhatsApp não informado</p>
               )}
             </div>
-          </div>
-        ) : (
-          <div className={`${panelClass} flex items-center gap-4 px-5 py-5`}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-surface-high">
-              <BriefcaseBusiness className="h-4 w-4 text-on-surface-variant" />
-            </div>
-            <p className="text-sm font-bold text-on-surface-variant">O atleta não tem agenciamento de carreira.</p>
           </div>
         )}
       </div>

@@ -2,7 +2,7 @@
 
 ## O que o app faz
 
-App web de gestão de atletas de futebol para agência/scouting (Attiva Sports). Após o login, o usuário vê um dashboard com atividades recentes e navega por listas de atletas (agenciados, captados/scout, negociados, totais), abre o perfil de cada atleta, cadastra/edita/exclui atletas e consulta um calendário. Inclui fluxo de recuperação e troca de senha por e-mail.
+App web de gestão de atletas de futebol para agência/scouting (Attiva Sports). Após o login, o usuário vê um dashboard com atividades recentes e navega por listas de atletas (agenciados e negociados, que são listas independentes, além de captados/scout e totais), abre o perfil de cada atleta, cadastra/edita/exclui atletas e consulta um calendário de jogos, cadastrados no próprio app e vinculados aos atletas. Inclui fluxo de recuperação e troca de senha por e-mail.
 
 ## Stack
 
@@ -15,20 +15,26 @@ App web de gestão de atletas de futebol para agência/scouting (Attiva Sports).
 ## Como rodar
 
 1. `npm install`
-2. Criar um `.env` na raiz com:
+2. Criar um `.env.local` na raiz com:
    ```
    VITE_SUPABASE_URL=...
    VITE_SUPABASE_ANON_KEY=...
    ```
-   O `.env.example` só lista as variáveis do template (Gemini), não as do Supabase.
+   O `.env.example` só lista as variáveis do template (Gemini), não as do Supabase. Todo `.env*` (menos o `.env.example`) está no `.gitignore` e não vai para o GitHub.
 3. `npm run dev` e abrir http://localhost:3000
 
 Outros scripts:
 
-- `npm run build`: gera `dist/`
+- `npm run build`: gera `dist/`; é a verificação confiável de que o app compila
 - `npm run preview`: serve o build
-- `npm run lint`: checagem de tipos (`tsc --noEmit`); não há testes automatizados
+- `npm run lint`: checagem de tipos (`tsc --noEmit`); não há testes automatizados. Hoje falha com 7 erros, todos em `node_modules/@supabase` (nenhum em `src/`); erro novo em `src/` é que precisa ser corrigido
 - `npm run clean`: usa `rm -rf`, não funciona no PowerShell
+
+## Git e GitHub
+
+- Repositório remoto: `origin` em `https://github.com/iScoutingPro/F1ELD-Pr-Atletas.git`. O trabalho vai direto na `main`, sem branches nem pull requests.
+- O login do GitHub está salvo neste computador pelo Git Credential Manager (primeiro envio em 02/10/2026), então `git push origin main` funciona sem pedir senha. Se voltar a pedir, o login é feito pelo usuário na janela do navegador; não pedir senha nem token pelo chat.
+- Commit e push só quando o usuário pedir. Mensagens de commit em português.
 
 ## Estrutura de pastas
 
@@ -38,16 +44,17 @@ vite.config.ts          plugins React + Tailwind, alias @ para a raiz
 public/assets/          imagens estáticas
 src/
   main.tsx              bootstrap do React
-  App.tsx               estado global, autenticação, CRUD de atletas, navegação e modais de perfil
-  types.ts              tipos Athlete, View e NavItem
+  App.tsx               estado global, autenticação, CRUD de atletas e de jogos, navegação e modais de perfil
+  types.ts              tipos Athlete, Game, View e NavItem
   data.ts               MOCK_ATHLETES (estado inicial antes de carregar do Supabase)
   index.css             Tailwind + tokens de tema (cores, fonte) e classes utilitárias
   lib/supabase.ts       cliente Supabase e flag hasSupabaseConfig
   countries.ts          lista de países (código ISO de três letras, nome em português, bandeira) e as opções de nacionalidade
-  components/           TopAppBar, BottomNavBar, Logo, AthleteInfo (corpo do perfil do atleta), CountrySelect (lista suspensa de países com busca)
+  components/           TopAppBar, BottomNavBar, Logo, AthleteInfo (corpo do perfil do atleta), AthleteGames (próximos jogos do atleta, no ícone Agenda do perfil), CountrySelect (lista suspensa de países com busca), ImageCropper (ajuste de enquadramento da foto do atleta)
   views/                uma tela por arquivo (LoginView, DashboardView, ScoutView, ...)
 supabase/
   athlete_profile_fields.sql   todas as colunas da tabela athletes gravadas pelo app (rodar manualmente no Supabase)
+  games.sql                    tabela games (jogos do calendário) e suas regras de acesso (rodar manualmente no Supabase)
 ```
 
 ## Regras do projeto
@@ -56,16 +63,21 @@ supabase/
 
 - Não há roteador. A tela atual é o estado `view` em `App.tsx`, do tipo `View` (`src/types.ts`), e `renderView()` escolhe o componente.
 - Para criar uma tela nova: adicionar o id ao tipo `View`, criar o arquivo em `src/views/`, adicionar o `case` em `renderView()` e, se for item de menu, incluir em `BottomNavBar`.
+- As abas Atletas Agenciados (`athletes`) e Atletas Negociados (`negociados`) usam o mesmo componente, `AthletesListView`, com `title` e `subtitle` diferentes. As duas listas são independentes: cada atleta pertence a uma só, pelo campo `listType` (`list_type` no banco, `'agenciados'` ou `'negociados'`; vazio conta como `'agenciados'`), e o filtro fica em `renderView()`. No cadastro o atleta entra na lista da aba aberta; na edição mantém a dele (definido em `handleSaveAthlete`, não no formulário). Apagar um atleta de uma lista não afeta a outra. A coluna `list_type` está em `supabase/athlete_profile_fields.sql`. Depois de salvar ou apagar, `returnToList` mantém o usuário em Negociados se ele estava lá; nos outros casos vai para Agenciados. `NegociadosView.tsx` (painel antigo de métricas) não é mais usado.
+- A aba Atletas Totais (`atletas-totais`, `AtletasTotaisView`) lista todos os atletas das duas listas em cartões com as informações principais (posição, categoria, lista, bandeiras, idade, altura, peso, pé, clube, cidade/estado, contrato e DVD), com resumo de contagens no topo, busca por nome ou clube e filtros de lista, categoria e posição (as opções de categoria e posição vêm dos próprios atletas). Clicar no cartão abre o perfil. A etiqueta de lista mostra "Agenciado", "Negociado" ou "Agenciado + Negociado": como as listas são independentes, "os dois" significa o mesmo atleta cadastrado nas duas (mesmo nome completo e mesma data de nascimento); `buildEntries` junta os dois cadastros num cartão só, que abre o perfil do cadastro de Agenciados. O filtro de lista tem também a opção "Os dois". Segue o visual do perfil: branco como destaque, sem laranja.
+  - Layout: painel compacto no topo (título "Atletas Totais" numa linha, contador "Exibindo X de Y" e faixa com cinco contagens: Atletas, Agenciados, Negociados, Os dois, Com DVD, em que cada pessoa conta uma vez); painel com a busca e os filtros; cartões em duas colunas (`lg:grid-cols-2`).
+  - Cartão (`AthleteCard`): foto em faixa lateral de altura cheia, com categoria e bandeiras sobre ela; à direita a etiqueta de lista, o nome, a posição, a faixa idade/altura/peso/pé e os detalhes (clube, cidade/estado, contrato, DVD) pelo componente `Detail`. O tamanho atual do cartão foi ajustado a pedido do usuário (nem o maior nem o menor); não alterar sem pedido.
+- O painel inicial (`DashboardView`) tem três cards no topo: Atletas Agenciados, Atletas Negociados e Atletas Totais. O card "Atletas Agenciados + Negociados" foi removido; a view `agenciados-negociados` (`AgenciadosNegociadosView`) continua existindo em `App.tsx`, só sem esse atalho.
 - Telas de autenticação (`login`, `recovery`, `verification`, `security`, `success`) são renderizadas sem `TopAppBar`/`BottomNavBar` (lista `showShell` em `App.tsx`).
 - Perfil, edição e cadastro de atleta são modais controlados por estado em `App.tsx`, não são views.
 
 ### Dados e Supabase
 
 - Todo acesso a dados passa pelo cliente em `src/lib/supabase.ts`. As chamadas ficam concentradas em `App.tsx` (e o login em `LoginView.tsx`); as views recebem dados e callbacks por props.
-- Tabelas: `athletes` e `recent_activities`.
-- O banco usa `snake_case` e o tipo `Athlete` usa `camelCase`. O mapeamento é manual em `App.tsx`: a leitura passa sempre por `mapAthleteRow` e a gravação pelo `payload` de `handleSaveAthlete`. Campos mapeados: `last_name`, `secondary_position`, `club_logo`, `birth_date`, `preferred_foot`, `has_dual_nationality`, `second_nationality`, `has_dvd`, `dvd_link`, `whatsapp_athlete`, `whatsapp_guardian`, `whatsapp_agent`, `has_agent`, `agent_company`, `agent_name`, `contract_type`, `contract_level`, `contract_club`, `contract_start`, `contract_end`, `contract_link` (cada um vira o equivalente em `camelCase`).
+- Tabelas: `athletes`, `recent_activities` e `games` (jogos do calendário).
+- O banco usa `snake_case` e o tipo `Athlete` usa `camelCase`. O mapeamento é manual em `App.tsx`: a leitura passa sempre por `mapAthleteRow` e a gravação pelo `payload` de `handleSaveAthlete`. Campos mapeados: `last_name`, `secondary_position`, `club_logo`, `birth_date`, `preferred_foot`, `has_dual_nationality`, `second_nationality`, `has_dvd`, `dvd_link`, `whatsapp_athlete`, `whatsapp_guardian`, `whatsapp_agent`, `has_agent`, `agent_company`, `agent_name`, `contract_type`, `contract_level`, `contract_club`, `contract_start`, `contract_end`, `contract_link`, `list_type` (cada um vira o equivalente em `camelCase`).
 - Ao adicionar um campo ao atleta: atualizar o tipo `Athlete`, `mapAthleteRow`, o `payload` (e o ramo sem Supabase) em `handleSaveAthlete`, o formulário em `EditProfileView`, a exibição em `AthleteInfo` e incluir a coluna em `supabase/athlete_profile_fields.sql`. O SQL não roda sozinho: precisa ser executado no SQL Editor do Supabase, senão a gravação falha por coluna inexistente.
-- `supabase/athlete_profile_fields.sql` cobre todas as colunas do `payload` (não só as do perfil), usa `add column if not exists` (pode ser rodado de novo sem risco, não altera dados) e termina com `notify pgrst, 'reload schema'` para a API enxergar as colunas na hora. Foi executado no projeto do Supabase em 02/10/2026, já com a coluna `contract_level`; colunas adicionadas depois disso exigem rodar o arquivo de novo (pendentes: `has_dual_nationality` e `second_nationality`).
+- `supabase/athlete_profile_fields.sql` cobre todas as colunas do `payload` (não só as do perfil), usa `add column if not exists` (pode ser rodado de novo sem risco, não altera dados) e termina com `notify pgrst, 'reload schema'` para a API enxergar as colunas na hora. Foi executado no projeto do Supabase em 02/10/2026, já com as colunas `contract_level`, `has_dual_nationality`, `second_nationality` e `list_type`; colunas adicionadas depois disso exigem rodar o arquivo de novo.
 - Nacionalidade e dupla nacionalidade: em "Informações pessoais" a linha do formulário é Data de Nascimento | Nacionalidade | "Dupla Nacionalidade?" (SIM/NÃO compacto, `hasDualNationality`); com "Sim" aparece o campo "Segunda Nacionalidade" (`secondNationality`). Nacionalidade e segunda nacionalidade são escolhidas no `CountrySelect` (lista suspensa com bandeira, sigla e busca por digitação) e gravadas como código ISO de três letras (ex.: `BRA`); "Segunda Nacionalidade" fica na mesma linha, à direita da pergunta. Opções: nacionalidade só com países da América do Sul, Brasil primeiro (`NATIONALITY_COUNTRIES`); segunda nacionalidade com América do Sul, principais países da Europa e Estados Unidos (`SECOND_NATIONALITY_COUNTRIES`). As listas ficam em `src/countries.ts`; `COUNTRIES` (lista completa) serve só para exibir códigos já gravados (nomes em português via `Intl.DisplayNames`, bandeiras carregadas de `flagcdn.com`). Valores antigos em texto livre (ex.: "Brasileira") continuam sendo exibidos como texto, sem bandeira, até o atleta ser editado. Salvar com "Não" apaga a segunda nacionalidade. No perfil, as linhas "Nacionalidade" e "Dupla Nacionalidade" mostram sigla, nome do país e a bandeira à direita ("Não possui" quando não há dupla nacionalidade).
 - O app só tem a chave `anon`, que não altera a estrutura do banco. Mudanças de esquema são feitas pelo usuário no SQL Editor; não pedir senha do banco nem token pelo chat.
 - No `payload`, campos opcionais vazios vão como `null` (não string vazia), para não quebrar colunas `date`/`numeric`.
@@ -73,15 +85,31 @@ supabase/
 ### Perfil do atleta
 
 - O modal de perfil fica em `App.tsx` (cabeçalho com foto, nome, etiquetas de posição, categoria e clube, linha "Contrato" e a coluna de botões à direita) e o corpo é o componente `AthleteInfo`. Ordem das seções: faixa de destaque (idade, altura, peso, pé dominante), "Informações pessoais", "Informações esportivas" (clube atual primeiro), "Informações contratuais", "Contatos" e "Outras informações" (DVD: possui ou não, e o link). O perfil mostra os mesmos campos do formulário `EditProfileView`, incluindo o nome completo em "Informações pessoais"; idade, altura, peso e pé dominante ficam só na faixa de destaque, acima das seções, sem repetir em "Informações pessoais". As observações não aparecem.
-- "Cidade/Estado" usa a coluna `naturalidade`. Peso em kg e altura em cm (`weight`, `height`); a idade (`age`) é calculada da data de nascimento ao salvar.
-- Contrato: um por atleta, `contractType` é `'Field'` ou `'Clube'` (vazio = sem contrato), com início, término e link do documento. Não há upload de arquivo.
+- "Cidade/Estado" usa a coluna `naturalidade`. Peso em kg e altura em cm no banco (`weight`, `height`); a idade (`age`) é calculada da data de nascimento ao salvar.
+- Altura e peso no formulário: rótulos "Altura" e "Peso", sem unidade entre parênteses. São campos de texto (`type="text"` com `inputMode="decimal"`), não `type="number"`, para não ter as setinhas nem subir de um em um; o `onInput` deixa só dígitos e uma vírgula ou ponto. A altura é digitada e exibida em metros (ex.: `1,80`) e convertida para centímetros por `toHeightCm` ao salvar; valor sem vírgula (ex.: `180`) já é tratado como centímetros. O perfil mostra a altura em metros.
+- Atleta sem clube aparece como "Sem Clube" (não mais "Livre no Mercado"): `clubName` em `App.tsx` converte campo vazio, `'Livre no Mercado'` e `'None'` na leitura (`mapAthleteRow`) e na gravação. No formulário o campo do clube fica vazio nesse caso. O valor interno de `status` continua `'In Club'` ou `'Livre no Mercado'` e não é exibido.
+- Categorias (constante `CATEGORIES`, repetida em `EditProfileView.tsx`, `AthletesListView.tsx` e `CalendarView.tsx`; alterar nas três): Profissional, Sub-20, Sub-17, Sub-15, Sub-14, Sub-13, Sub-12, Sub-11 e Sub-10.
+- Contrato: um por atleta, `contractType` é `'Field'` ou `'Clube'` (vazio = sem contrato), com início, término e link do documento. Não há upload de arquivo. O formulário não tem mais a escolha "Sem contrato / Com a Field / Com o clube": início, término e link ficam sempre visíveis e, ao salvar, `EditProfileView` grava `'Field'` se algum deles estiver preenchido e vazio se nenhum estiver; `'Clube'` já gravado (e o `contractClub`) é mantido.
 - `contractLevel` (`contract_level`) é `'Profissional'` ou `'Amador'`: escolhido em "Tipo de Contrato" no formulário (independente de `contractType`) e exibido como "Contrato: ..." no cabeçalho do perfil, abaixo das etiquetas. O cabeçalho não tem mais o rótulo "Perfil do atleta".
-- À direita do cabeçalho do perfil há uma coluna centralizada na vertical, com duas linhas da mesma largura: em cima "Editar perfil" (só `admin`, branco sólido com ícone de lápis, `flex-1` para preencher a linha) e o botão de fechar (círculo vermelho, token `error`, via `closeAthleteModal`); embaixo o painel com os cinco ícones de detalhe (Documentos, Agenda, Negócios, Perfil, Status, via `setProfileDetailView`). As bordas das duas linhas devem ficar alinhadas; sem `admin`, o fechar fica sozinho à direita. A linha do nome do atleta não tem botões.
-- Contatos: WhatsApp do atleta e do responsável em cima; embaixo o empresário. Com `hasAgent` verdadeiro mostra empresa, nome e WhatsApp do empresário; caso contrário, a mensagem "O atleta não tem agenciamento de carreira". Salvar com `hasAgent` falso apaga os dados do empresário.
+- À direita do cabeçalho do perfil há uma coluna centralizada na vertical, com duas linhas da mesma largura: em cima "Editar perfil" (só `admin`, branco sólido com ícone de lápis, `flex-1` para preencher a linha) e o botão de fechar (círculo vermelho, token `error`, via `closeAthleteModal`); embaixo o painel com os cinco ícones de detalhe (Documentos, Agenda, Negócios, Perfil, Status, via `setProfileDetailView`). Só o ícone Agenda tem tela (próximos jogos do atleta, ver "Calendário e jogos") e fica branco quando ativo; os outros quatro ainda não mostram nada. As bordas das duas linhas devem ficar alinhadas; sem `admin`, o fechar fica sozinho à direita. A linha do nome do atleta não tem botões.
+- Contatos: WhatsApp do atleta e do responsável. O formulário não tem mais a pergunta "Possui empresário?" nem os campos do empresário: `EditProfileView` repassa `hasAgent`, `agentCompany`, `agentName` e `whatsappAgent` já gravados (atleta novo entra com `hasAgent` falso). No perfil, o cartão do empresário (empresa, nome e WhatsApp) só aparece para quem já tem `hasAgent` verdadeiro; sem empresário não aparece nada.
 - Sempre checar `hasSupabaseConfig` antes de usar `supabase` (ele é `null` sem as variáveis de ambiente). Sem configuração o app fica na tela de login.
 - Ids de atletas reais são UUID; ids que não são UUID (mocks ou `local-...`) são tratados só em memória e viram `insert` ao salvar.
-- Criar ou editar um atleta registra uma linha em `recent_activities` via `recordActivity`, somente depois de confirmada a gravação.
+- Criar ou editar um atleta registra uma linha em `recent_activities` via `recordActivity`, somente depois de confirmada a gravação. No cadastro o título é "NOVO ATLETA AGENCIADO" ou "NOVO ATLETA NEGOCIADO", conforme a lista.
+- A exclusão é definitiva: apaga a linha de `athletes` no Supabase, sem lixeira nem cópia no app. Só dá para recuperar por backup do Supabase.
+- O painel inicial (`DashboardView`) e as abas Scout, Atletas Totais e Agenciados + Negociados ainda recebem todos os atletas, das duas listas juntas, sem filtrar por `listType`.
 - Quando o RLS bloqueia um `update` ou `delete`, o Supabase não retorna erro, só altera zero linhas. Todo `update`/`delete` deve terminar com `.select()` e tratar retorno vazio como ação não permitida: mostrar o aviso de `notAllowedMessage` (via `setNotice`) e não atualizar o estado local, não fechar o modal nem registrar atividade. No `insert`, o bloqueio vem como erro de código `42501` e recebe a mesma mensagem.
+
+### Calendário e jogos
+
+- A aba Calendário (`CalendarView`) mostra os jogos cadastrados no app (tabela `games`), sem dados fixos no código. O calendário abre no mês atual com o dia de hoje selecionado; dias com jogo têm um ponto e o painel "Agenda" lista os jogos do dia selecionado, por horário.
+- O botão "Adicionar jogo" (no topo do painel "Agenda") e o lápis de cada jogo só aparecem para `admin` e abrem o formulário `GameForm` (mesmo arquivo, modal via `createPortal`): Data, Horário, Mandante, Visitante, Categoria, Competição, Local e "Atletas vinculados". Obrigatórios: Data, Mandante e Visitante. No cadastro a data já vem com o dia selecionado. A exclusão fica no formulário de edição, com confirmação em dois cliques (sem `window.confirm`).
+- Vínculo com atletas: cada jogo guarda os ids dos atletas cadastrados em `athleteIds` (`athlete_ids uuid[]` no banco), escolhidos numa lista com busca por nome ou clube; pode ter vários ou nenhum. No cartão do jogo, cada atleta aparece com foto e nome e abre o perfil ao clicar. Id de atleta apagado é ignorado na exibição.
+- Cartão do jogo (painel "Agenda"): topo com competição, etiqueta de categoria e lápis; confronto em três colunas (escudo e nome do mandante, horário em destaque com "VS", escudo e nome do visitante); linha do local; bloco "Atletas em campo" com uma linha por atleta (foto, nome, posição · categoria). O escudo (`TeamCrest`) usa o `clubLogo` de algum atleta cadastrado com o mesmo nome de clube; sem isso mostra a sigla do time. Nomes quebram linha, sem reticências. Destaque em branco, sem laranja.
+- No perfil do atleta, o ícone Agenda (`profileDetailView === 'calendar'`) troca o corpo do perfil (`AthleteInfo`) por `AthleteGames` (`src/components/AthleteGames.tsx`): só os jogos em que aquele atleta está vinculado, de hoje em diante, em ordem de data e horário. Clicar de novo na Agenda, ou em outro ícone, volta para as informações. Os outros quatro ícones ainda não têm tela.
+- Tipo `Game` em `src/types.ts`; leitura por `mapGameRow` e gravação por `handleSaveGame` / `handleDeleteGame` em `App.tsx` (devolvem `true` quando gravou, para o formulário fechar). Colunas: `game_date`, `game_time`, `home`, `away`, `venue`, `category`, `competition`, `athlete_ids`.
+- A tabela e as regras de acesso (todos leem, só `admin` grava) estão em `supabase/games.sql`, que precisa ser executado no SQL Editor do Supabase. Sem isso, salvar mostra o aviso "Calendário não configurado" (`gameErrorNotice`). Neste projeto do Supabase, tabela nova não vem liberada para a API: o arquivo precisa do `grant ... to authenticated` (sem ele o banco devolve `42501` "permission denied for table", mesmo para `admin`).
+- A lista "Próximos jogos" do painel inicial (`DashboardView`) ainda usa dados fixos, não a tabela `games`.
 
 ### Avisos e erros
 
@@ -92,13 +120,14 @@ supabase/
 
 ### Formulário de cadastro e edição
 
-- O botão "+" da aba Atletas Agenciados (`AthletesListView`, só para `admin`) e o "Editar perfil" abrem o mesmo formulário, `EditProfileView`, num modal de `App.tsx`. Qualquer mudança no formulário vale para o cadastro e para a edição.
+- O botão "+" das abas Atletas Agenciados e Atletas Negociados (`AthletesListView`, só para `admin`) e o "Editar perfil" abrem o mesmo formulário, `EditProfileView`, num modal de `App.tsx`. Qualquer mudança no formulário vale para o cadastro e para a edição.
 - O modal não tem `TopAppBar`: fecha pelo "×" ou pelo "Cancelar", ambos via `closeAthleteModal`, que também zera `isAddingAthlete`.
-- As seções seguem a ordem do perfil, cada uma num cartão do componente `FormSection`: "Informações pessoais", "Informações esportivas", "Informações contratuais", "Contatos" e "Outras informações" (só DVD: possui ou não, e o link).
+- As seções seguem a ordem do perfil, cada uma num cartão do componente `FormSection`: "Informações pessoais", "Informações esportivas", "Informações contratuais" (Tipo de Contrato, início, término e link), "Contatos" (só WhatsApp do atleta e do responsável) e "Outras informações" (só DVD: possui ou não, e o link).
 - Origem (`source`) e observações (`notes`) não aparecem no formulário. Ao salvar, `EditProfileView` repassa o valor já gravado; atleta novo entra como `'Captado'`.
 - Campos obrigatórios (marcados com "*"): Nome Completo, Data de Nascimento, Categoria e Posição Principal. A checagem fica no início de `handleSaveAthlete`: se faltar algum, abre o aviso "Campos obrigatórios não preenchidos" listando os que faltam e nada é gravado. Categoria e posição começam em "Selecione" (vazio) no cadastro.
+- Foto do atleta: ao escolher um arquivo, abre o `ImageCropper` (`src/components/ImageCropper.tsx`), onde o usuário arrasta a foto e usa o zoom (inclusive afastar até a foto caber inteira); "Aplicar" gera um JPEG quadrado de 600 px, que é o que vai para `image`. O botão "Ajustar foto" reabre o ajuste e só aparece quando a foto atual é um data URL (enviada pelo app); foto de link externo precisa ser reenviada. O escudo do clube não passa pelo ajuste.
 - Não há campo de senha no formulário: a permissão vem do papel `admin`.
-- Visual: mesmo padrão de cartões do perfil (`panelClass`), mas sem laranja. Botões e opções selecionadas em branco (`bg-primary` com `text-background`), sombreado do topo do modal e aro da foto em branco, foco dos campos em branco. Títulos das seções em `text-base`, negrito e sublinhados. O modal de perfil (cabeçalho em `App.tsx` e `AthleteInfo`) também usa branco (`primary`) como destaque, sem laranja; a única exceção de cor é o botão de fechar do perfil, em vermelho (`error`).
+- Visual: mesmo padrão de cartões do perfil (`panelClass`), mas sem laranja. Botões e opções selecionadas em branco (`bg-primary` com `text-background`), sombreado do topo do modal e aro da foto em branco, foco dos campos em branco. Títulos das seções em `text-base`, negrito e sublinhados; os títulos das seções do perfil (`SectionTitle` em `AthleteInfo`) usam as mesmas classes do `FormSection` e devem ser mantidos iguais. O modal de perfil (cabeçalho em `App.tsx` e `AthleteInfo`) também usa branco (`primary`) como destaque, sem laranja; a única exceção de cor é o botão de fechar do perfil, em vermelho (`error`).
 
 ### Autenticação
 

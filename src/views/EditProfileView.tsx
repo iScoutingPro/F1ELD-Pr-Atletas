@@ -2,9 +2,10 @@ import React, { useRef, useState } from 'react';
 import { Camera, ShieldCheck } from 'lucide-react';
 import { Athlete } from '../types';
 import { CountrySelect } from '../components/CountrySelect';
+import { ImageCropper } from '../components/ImageCropper';
 import { NATIONALITY_COUNTRIES, SECOND_NATIONALITY_COUNTRIES } from '../countries';
 
-const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-13', 'Sub-11'];
+const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 const POSITIONS = ['Goleiro', 'Lateral Esquerdo', 'Lateral Direito', 'Zagueiro', 'Volante', 'Meia', 'Extremo', 'Centroavante'];
 const FEET = ['Direito', 'Esquerdo', 'Ambidestro'];
 
@@ -40,6 +41,13 @@ const toNumber = (value?: string) => {
   return Number.isNaN(parsed) ? undefined : parsed;
 };
 
+// A altura é digitada em metros (1,80) e gravada em centímetros; valor sem vírgula (180) já é tratado como centímetros.
+const toHeightCm = (value?: string) => {
+  const parsed = toNumber(value);
+  if (parsed === undefined) return undefined;
+  return parsed < 10 ? Math.round(parsed * 100) : Math.round(parsed);
+};
+
 interface EditProfileViewProps {
   athlete?: Athlete;
   onBack: () => void;
@@ -50,6 +58,8 @@ interface EditProfileViewProps {
 
 export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = [] }: EditProfileViewProps) => {
   const [athleteImage, setAthleteImage] = useState(athlete?.image || "https://picsum.photos/seed/athlete_profile/300/300");
+  // Foto aberta no ajuste de enquadramento (só vira a foto do atleta ao clicar em "Aplicar")
+  const [cropSource, setCropSource] = useState<string | null>(null);
   const [clubLogo, setClubLogo] = useState(athlete?.clubLogo || "");
   const athleteFileRef = useRef<HTMLInputElement>(null);
   const clubFileRef = useRef<HTMLInputElement>(null);
@@ -66,17 +76,11 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
   const heightRef = useRef<HTMLInputElement>(null);
   const whatsappAthleteRef = useRef<HTMLInputElement>(null);
   const whatsappGuardianRef = useRef<HTMLInputElement>(null);
-  const whatsappAgentRef = useRef<HTMLInputElement>(null);
-  const agentCompanyRef = useRef<HTMLInputElement>(null);
-  const agentNameRef = useRef<HTMLInputElement>(null);
-  const contractClubRef = useRef<HTMLInputElement>(null);
   const contractStartRef = useRef<HTMLInputElement>(null);
   const contractEndRef = useRef<HTMLInputElement>(null);
   const contractLinkRef = useRef<HTMLInputElement>(null);
 
-  const [contractType, setContractType] = useState<'' | 'Field' | 'Clube'>(athlete?.contractType || '');
   const [contractLevel, setContractLevel] = useState<'' | 'Profissional' | 'Amador'>(athlete?.contractLevel || '');
-  const [hasAgent, setHasAgent] = useState(athlete?.hasAgent ?? false);
   const [nacionalidade, setNacionalidade] = useState(athlete?.nacionalidade || '');
   const [hasDualNationality, setHasDualNationality] = useState(athlete?.hasDualNationality ?? false);
   const [secondNationality, setSecondNationality] = useState(athlete?.secondNationality || '');
@@ -91,12 +95,22 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
       reader.onloadend = () => setter(reader.result as string);
       reader.readAsDataURL(file);
     }
+    // Permite escolher o mesmo arquivo de novo
+    e.target.value = '';
   };
 
   const handleSubmit = () => {
     const fullName = (nameRef.current?.value || '').trim();
     const nameParts = fullName.split(' ');
     const birthDate = birthDateRef.current?.value || '';
+    const contractStart = contractStartRef.current?.value || '';
+    const contractEnd = contractEndRef.current?.value || '';
+    const contractLink = (contractLinkRef.current?.value || '').trim();
+    // O formulário não escolhe mais com quem é o contrato: contrato preenchido é com a Field;
+    // contrato com clube já gravado é mantido
+    const contractType = athlete?.contractType === 'Clube'
+      ? 'Clube'
+      : (contractStart || contractEnd || contractLink) ? 'Field' : undefined;
     onSave({
       name: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
@@ -114,19 +128,20 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
       age: birthDate ? calcAge(birthDate) : undefined,
       preferredFoot: preferredFootRef.current?.value,
       weight: toNumber(weightRef.current?.value),
-      height: toNumber(heightRef.current?.value),
+      height: toHeightCm(heightRef.current?.value),
       whatsappAthlete: whatsappAthleteRef.current?.value.trim(),
       whatsappGuardian: whatsappGuardianRef.current?.value.trim(),
-      hasAgent,
-      agentCompany: hasAgent ? agentCompanyRef.current?.value.trim() : undefined,
-      agentName: hasAgent ? agentNameRef.current?.value.trim() : undefined,
-      whatsappAgent: hasAgent ? whatsappAgentRef.current?.value.trim() : undefined,
-      contractType: contractType || undefined,
+      // Empresário não é editado aqui: mantém o que já estava gravado
+      hasAgent: athlete?.hasAgent ?? false,
+      agentCompany: athlete?.agentCompany,
+      agentName: athlete?.agentName,
+      whatsappAgent: athlete?.whatsappAgent,
+      contractType,
       contractLevel: contractLevel || undefined,
-      contractClub: contractType === 'Clube' ? contractClubRef.current?.value.trim() : undefined,
-      contractStart: contractType ? contractStartRef.current?.value : undefined,
-      contractEnd: contractType ? contractEndRef.current?.value : undefined,
-      contractLink: contractType ? contractLinkRef.current?.value.trim() : undefined,
+      contractClub: contractType === 'Clube' ? athlete?.contractClub : undefined,
+      contractStart,
+      contractEnd,
+      contractLink,
       // Origem e observações não são editadas aqui: mantém o que já estava gravado
       notes: athlete?.notes,
       hasDvd,
@@ -137,7 +152,17 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
 
   return (
     <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-12 sm:px-10">
-      <input type="file" ref={athleteFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setAthleteImage)} />
+      <input type="file" ref={athleteFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setCropSource)} />
+      {cropSource && (
+        <ImageCropper
+          src={cropSource}
+          onCancel={() => setCropSource(null)}
+          onConfirm={(image) => {
+            setAthleteImage(image);
+            setCropSource(null);
+          }}
+        />
+      )}
       <input type="file" ref={clubFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setClubLogo)} />
 
       <section className={`${panelClass} relative mb-10 overflow-hidden p-8`}>
@@ -161,6 +186,16 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               {athlete ? `${athlete.name} ${athlete.lastName}` : 'Novo atleta'}
             </h2>
             <p className="mt-3 text-xs font-bold text-on-surface-variant">Toque na foto para escolher a imagem do atleta.</p>
+            {/* Só fotos enviadas pelo app (data URL) podem ser reajustadas; imagens de link externo não */}
+            {athleteImage.startsWith('data:') && (
+              <button
+                type="button"
+                onClick={() => setCropSource(athleteImage)}
+                className="mt-3 rounded-xl border border-white/10 bg-surface-high px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant transition hover:border-white/30 hover:text-on-surface"
+              >
+                Ajustar foto
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -200,12 +235,12 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-1">
-              <label className={labelClass}>Altura (cm)</label>
-              <input type="number" min="0" step="1" ref={heightRef} defaultValue={athlete?.height ?? ''} className={inputClass} placeholder="Ex.: 180" />
+              <label className={labelClass}>Altura</label>
+              <input type="text" inputMode="decimal" maxLength={4} ref={heightRef} defaultValue={athlete?.height ? (athlete.height / 100).toFixed(2).replace('.', ',') : ''} onInput={e => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1'); }} className={inputClass} placeholder="Ex.: 1,80" />
             </div>
             <div className="space-y-1">
-              <label className={labelClass}>Peso (kg)</label>
-              <input type="number" min="0" step="0.1" ref={weightRef} defaultValue={athlete?.weight ?? ''} className={inputClass} placeholder="Ex.: 72" />
+              <label className={labelClass}>Peso</label>
+              <input type="text" inputMode="decimal" maxLength={5} ref={weightRef} defaultValue={athlete?.weight ?? ''} onInput={e => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1'); }} className={inputClass} placeholder="Ex.: 72" />
             </div>
             <div className="space-y-1">
               <label className={labelClass}>Pé Dominante</label>
@@ -221,7 +256,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
           <div className="space-y-1">
             <label className={labelClass}>Clube Atual</label>
             <div className="flex gap-4 items-center">
-              <input type="text" ref={clubRef} defaultValue={athlete?.club} className={`flex-1 ${inputClass}`} placeholder="Nome do Clube" />
+              <input type="text" ref={clubRef} defaultValue={athlete?.club === 'Sem Clube' ? '' : athlete?.club} className={`flex-1 ${inputClass}`} placeholder="Nome do Clube" />
               <button type="button" className="relative group" onClick={() => clubFileRef.current?.click()} aria-label="Escudo do clube">
                 <div className="flex h-[50px] w-[50px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-surface-high transition group-hover:border-white/40">
                   {clubLogo ? <img src={clubLogo} alt="Logo" className="w-full h-full object-contain" /> : <ShieldCheck className="h-5 w-5 text-primary" />}
@@ -265,40 +300,20 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               ))}
             </div>
           </div>
-          <div className="space-y-2">
-            <label className={labelClass}>Contrato do Atleta</label>
-            <div className="flex gap-4">
-              {([['', 'SEM CONTRATO'], ['Field', 'COM A FIELD'], ['Clube', 'COM O CLUBE']] as const).map(([value, label]) => (
-                <button key={label} type="button" onClick={() => setContractType(value)} className={toggleClass(contractType === value)}>
-                  {label}
-                </button>
-              ))}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className={labelClass}>Início do Contrato</label>
+              <input type="date" ref={contractStartRef} defaultValue={athlete?.contractStart || ''} className={`${inputClass} [color-scheme:dark]`} />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Término do Contrato</label>
+              <input type="date" ref={contractEndRef} defaultValue={athlete?.contractEnd || ''} className={`${inputClass} [color-scheme:dark]`} />
             </div>
           </div>
-          {contractType && (
-            <div className="space-y-4">
-              {contractType === 'Clube' && (
-                <div className="space-y-1">
-                  <label className={labelClass}>Clube do Contrato</label>
-                  <input type="text" ref={contractClubRef} defaultValue={athlete?.contractClub || ''} className={inputClass} placeholder="Clube com o qual o atleta foi negociado" />
-                </div>
-              )}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className={labelClass}>Início do Contrato</label>
-                  <input type="date" ref={contractStartRef} defaultValue={athlete?.contractStart || ''} className={`${inputClass} [color-scheme:dark]`} />
-                </div>
-                <div className="space-y-1">
-                  <label className={labelClass}>Término do Contrato</label>
-                  <input type="date" ref={contractEndRef} defaultValue={athlete?.contractEnd || ''} className={`${inputClass} [color-scheme:dark]`} />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className={labelClass}>Link do Contrato</label>
-                <input type="url" ref={contractLinkRef} defaultValue={athlete?.contractLink || ''} className={inputClass} placeholder="Link do documento (Google Drive, etc.)" />
-              </div>
-            </div>
-          )}
+          <div className="space-y-1">
+            <label className={labelClass}>Link do Contrato</label>
+            <input type="url" ref={contractLinkRef} defaultValue={athlete?.contractLink || ''} className={inputClass} placeholder="Link do documento (Google Drive, etc.)" />
+          </div>
         </FormSection>
 
         <FormSection title="Contatos">
@@ -312,29 +327,6 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               <input type="tel" ref={whatsappGuardianRef} defaultValue={athlete?.whatsappGuardian || ''} className={inputClass} placeholder="(11) 99999-9999" />
             </div>
           </div>
-          <div className="space-y-2">
-            <label className={labelClass}>Possui Empresário?</label>
-            <div className="flex gap-4">
-              <button type="button" onClick={() => setHasAgent(true)} className={toggleClass(hasAgent)}>SIM</button>
-              <button type="button" onClick={() => setHasAgent(false)} className={toggleClass(!hasAgent)}>NÃO</button>
-            </div>
-          </div>
-          {hasAgent && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="space-y-1">
-                <label className={labelClass}>Empresa</label>
-                <input type="text" ref={agentCompanyRef} defaultValue={athlete?.agentCompany || ''} className={inputClass} placeholder="Nome da empresa" />
-              </div>
-              <div className="space-y-1">
-                <label className={labelClass}>Nome do Empresário</label>
-                <input type="text" ref={agentNameRef} defaultValue={athlete?.agentName || ''} className={inputClass} placeholder="Nome do empresário" />
-              </div>
-              <div className="space-y-1">
-                <label className={labelClass}>WhatsApp Empresário</label>
-                <input type="tel" ref={whatsappAgentRef} defaultValue={athlete?.whatsappAgent || ''} className={inputClass} placeholder="(11) 99999-9999" />
-              </div>
-            </div>
-          )}
         </FormSection>
 
         <FormSection title="Outras informações">
