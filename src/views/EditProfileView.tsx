@@ -1,8 +1,44 @@
 import React, { useRef, useState } from 'react';
-import { Camera, ShieldCheck, FileText, CalendarDays, Calendar, Trophy, MapPin, UserRound } from 'lucide-react';
+import { Camera, ShieldCheck } from 'lucide-react';
 import { Athlete } from '../types';
+import { CountrySelect } from '../components/CountrySelect';
+import { NATIONALITY_COUNTRIES, SECOND_NATIONALITY_COUNTRIES } from '../countries';
 
 const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-13', 'Sub-11'];
+const POSITIONS = ['Goleiro', 'Lateral Esquerdo', 'Lateral Direito', 'Zagueiro', 'Volante', 'Meia', 'Extremo', 'Centroavante'];
+const FEET = ['Direito', 'Esquerdo', 'Ambidestro'];
+
+const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
+const labelClass = 'ml-1 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant';
+const inputClass = 'w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
+const toggleClass = (active: boolean) =>
+  `flex-1 rounded-xl border py-3.5 text-[10px] font-black uppercase tracking-[0.2em] transition ${active ? 'border-primary bg-primary text-background shadow-[0_8px_24px_rgba(255,255,255,0.12)]' : 'border-white/10 bg-surface-high text-on-surface-variant hover:border-white/30 hover:text-on-surface'}`;
+
+// Mesmas seções (e mesma ordem) do perfil do atleta em AthleteInfo
+const FormSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <section className="space-y-3">
+    <div className="flex items-center gap-3">
+      <span className="h-4 w-0.5 rounded-full bg-primary" />
+      <h3 className="text-base font-black uppercase tracking-[0.12em] text-primary underline decoration-2 underline-offset-8">{title}</h3>
+      <span className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
+    </div>
+    <div className={`${panelClass} space-y-5 p-6`}>{children}</div>
+  </section>
+);
+
+const calcAge = (birthDate: string) => {
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return undefined;
+  const today = new Date();
+  const hadBirthday = today.getMonth() > birth.getMonth()
+    || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  return today.getFullYear() - birth.getFullYear() - (hadBirthday ? 0 : 1);
+};
+
+const toNumber = (value?: string) => {
+  const parsed = parseFloat((value || '').replace(',', '.'));
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
 
 interface EditProfileViewProps {
   athlete?: Athlete;
@@ -24,16 +60,29 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
   const clubRef = useRef<HTMLInputElement>(null);
   const categoryRef = useRef<HTMLSelectElement>(null);
   const naturalidadeRef = useRef<HTMLInputElement>(null);
-  const nacionalidadeRef = useRef<HTMLInputElement>(null);
   const birthDateRef = useRef<HTMLInputElement>(null);
-  const ageRef = useRef<HTMLInputElement>(null);
   const preferredFootRef = useRef<HTMLSelectElement>(null);
-  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const weightRef = useRef<HTMLInputElement>(null);
+  const heightRef = useRef<HTMLInputElement>(null);
+  const whatsappAthleteRef = useRef<HTMLInputElement>(null);
+  const whatsappGuardianRef = useRef<HTMLInputElement>(null);
+  const whatsappAgentRef = useRef<HTMLInputElement>(null);
+  const agentCompanyRef = useRef<HTMLInputElement>(null);
+  const agentNameRef = useRef<HTMLInputElement>(null);
+  const contractClubRef = useRef<HTMLInputElement>(null);
+  const contractStartRef = useRef<HTMLInputElement>(null);
+  const contractEndRef = useRef<HTMLInputElement>(null);
+  const contractLinkRef = useRef<HTMLInputElement>(null);
+
+  const [contractType, setContractType] = useState<'' | 'Field' | 'Clube'>(athlete?.contractType || '');
+  const [contractLevel, setContractLevel] = useState<'' | 'Profissional' | 'Amador'>(athlete?.contractLevel || '');
+  const [hasAgent, setHasAgent] = useState(athlete?.hasAgent ?? false);
+  const [nacionalidade, setNacionalidade] = useState(athlete?.nacionalidade || '');
+  const [hasDualNationality, setHasDualNationality] = useState(athlete?.hasDualNationality ?? false);
+  const [secondNationality, setSecondNationality] = useState(athlete?.secondNationality || '');
 
   const [hasDvd, setHasDvd] = useState(athlete?.hasDvd ?? false);
   const [dvdLink, setDvdLink] = useState(athlete?.dvdLink || '');
-  const [source, setSource] = useState<'Captado' | 'Indicado'>(athlete?.source || 'Captado');
-  const [adminPassword, setAdminPassword] = useState('');
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
@@ -45,8 +94,9 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
   };
 
   const handleSubmit = () => {
-    const fullName = nameRef.current?.value || '';
+    const fullName = (nameRef.current?.value || '').trim();
     const nameParts = fullName.split(' ');
+    const birthDate = birthDateRef.current?.value || '';
     onSave({
       name: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
@@ -57,200 +107,267 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
       image: athleteImage,
       clubLogo: clubLogo,
       naturalidade: naturalidadeRef.current?.value,
-      nacionalidade: nacionalidadeRef.current?.value,
-      birthDate: birthDateRef.current?.value,
-      age: parseInt(ageRef.current?.value || '0'),
-      preferredFoot: preferredFootRef.current?.value as any,
-      notes: notesRef.current?.value,
+      nacionalidade,
+      hasDualNationality,
+      secondNationality: hasDualNationality ? secondNationality : undefined,
+      birthDate,
+      age: birthDate ? calcAge(birthDate) : undefined,
+      preferredFoot: preferredFootRef.current?.value,
+      weight: toNumber(weightRef.current?.value),
+      height: toNumber(heightRef.current?.value),
+      whatsappAthlete: whatsappAthleteRef.current?.value.trim(),
+      whatsappGuardian: whatsappGuardianRef.current?.value.trim(),
+      hasAgent,
+      agentCompany: hasAgent ? agentCompanyRef.current?.value.trim() : undefined,
+      agentName: hasAgent ? agentNameRef.current?.value.trim() : undefined,
+      whatsappAgent: hasAgent ? whatsappAgentRef.current?.value.trim() : undefined,
+      contractType: contractType || undefined,
+      contractLevel: contractLevel || undefined,
+      contractClub: contractType === 'Clube' ? contractClubRef.current?.value.trim() : undefined,
+      contractStart: contractType ? contractStartRef.current?.value : undefined,
+      contractEnd: contractType ? contractEndRef.current?.value : undefined,
+      contractLink: contractType ? contractLinkRef.current?.value.trim() : undefined,
+      // Origem e observações não são editadas aqui: mantém o que já estava gravado
+      notes: athlete?.notes,
       hasDvd,
       dvdLink,
-      source,
+      source: athlete?.source,
     });
   };
 
-  const athleteMeta = [
-    { icon: Calendar, label: 'Data de Nascimento', value: athlete?.birthDate || '—' },
-    { icon: UserRound, label: 'Idade', value: athlete?.age ? `${athlete.age} anos` : '—' },
-    { icon: Trophy, label: 'Categoria', value: athlete?.category || '—' },
-    { icon: MapPin, label: 'Posição', value: athlete?.position || '—' },
-    { icon: ShieldCheck, label: 'Clube Atual', value: athlete?.club || '—' },
-  ];
-
   return (
-    <div className="pt-24 pb-32 px-6 max-w-4xl mx-auto">
+    <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-12 sm:px-10">
       <input type="file" ref={athleteFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setAthleteImage)} />
       <input type="file" ref={clubFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setClubLogo)} />
 
-      <section className="mb-12 rounded-3xl border border-white/5 bg-surface-low p-8">
-        <div className="flex items-center justify-start gap-8">
-          <div className="flex flex-col items-center justify-center">
-            <button type="button" className="relative group flex-shrink-0" onClick={() => athleteFileRef.current?.click()}>
-              <div className="h-28 w-28 overflow-hidden rounded-full border-4 border-surface-highest shadow-2xl">
-                <img src={athleteImage} alt="Atleta" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
-              </div>
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/60 opacity-0 transition-opacity group-hover:opacity-100">
-                <Camera className="h-7 w-7 text-white" />
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                document.getElementById('informacoes-gerais')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-              className="mt-4 text-[10px] font-black uppercase tracking-[0.18em] text-primary transition hover:text-white"
-            >
-              Editar Perfil
-            </button>
-          </div>
-
-          <div className="flex flex-1 items-center justify-between gap-4">
-            <div className="flex flex-col justify-center">
-              {athlete ? (
-                <>
-                  <p className="text-3xl font-black uppercase italic leading-none text-white tracking-[-0.04em]">
-                    {athlete.name} {athlete.lastName}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
-                    {athleteMeta.map(({ icon: Icon, label, value }) => (
-                      <div key={label} className="flex items-center gap-1.5">
-                        <Icon className="h-3 w-3 text-on-surface-variant/80" />
-                        <span>{label}: {value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-3xl font-black uppercase italic leading-none text-white tracking-[-0.04em]">NOVO ATLETA</p>
-              )}
+      <section className={`${panelClass} relative mb-10 overflow-hidden p-8`}>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+        <div className="relative flex flex-wrap items-center gap-6">
+          <button
+            type="button"
+            onClick={() => athleteFileRef.current?.click()}
+            className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-white/80 ring-offset-4 ring-offset-background transition hover:scale-[1.02]"
+            aria-label="Trocar foto do atleta"
+          >
+            <img src={athleteImage} alt="Atleta" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition group-hover:opacity-100">
+              <Camera className="h-6 w-6 text-white" />
             </div>
-
-            <div className="flex items-center gap-3">
-              {[{ icon: FileText, label: 'Dados' }, { icon: CalendarDays, label: 'Agenda' }, { icon: ShieldCheck, label: 'Acesso' }].map(({ icon: Icon, label }) => (
-                <button
-                  key={label}
-                  type="button"
-                  className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-surface-high text-on-surface-variant transition hover:border-primary/35 hover:text-white"
-                  aria-label={label}
-                >
-                  <Icon className="h-5 w-5" />
-                </button>
-              ))}
-            </div>
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">{athlete ? 'Editar perfil' : 'Cadastro de atleta'}</p>
+            <h2 className="mt-2 truncate text-3xl font-black uppercase italic leading-none text-white">
+              {athlete ? `${athlete.name} ${athlete.lastName}` : 'Novo atleta'}
+            </h2>
+            <p className="mt-3 text-xs font-bold text-on-surface-variant">Toque na foto para escolher a imagem do atleta.</p>
           </div>
         </div>
       </section>
 
-      <div id="informacoes-gerais" className="space-y-8">
-        <div className="border-l-4 border-primary pl-4">
-          <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">INFORMAÇÕES GERAIS</h2>
-        </div>
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Senha de Administração</label>
-            <input
-              type="password"
-              value={adminPassword}
-              onChange={(e) => setAdminPassword(e.target.value)}
-              placeholder="Digite a senha"
-              className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm border border-white/5 focus:border-primary/50 transition-colors"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Origem do Atleta</label>
-            <div className="flex gap-4">
-              <button 
-                type="button" 
-                onClick={() => setSource('Captado')} 
-                className={`flex-1 py-4 rounded-xl text-xs font-black transition-all tracking-widest ${source === 'Captado' ? 'bg-primary text-background' : 'bg-surface-high text-white border border-white/5'}`}
-              >
-                CAPTADO
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setSource('Indicado')} 
-                className={`flex-1 py-4 rounded-xl text-xs font-black transition-all tracking-widest ${source === 'Indicado' ? 'bg-primary text-background' : 'bg-surface-high text-white border border-white/5'}`}
-              >
-                INDICADO
-              </button>
-            </div>
-          </div>
+      <div className="space-y-8">
+        <FormSection title="Informações pessoais">
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Nome Completo</label>
-            <input type="text" ref={nameRef} defaultValue={athlete ? `${athlete.name} ${athlete.lastName}` : ''} className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm" placeholder="Nome Completo" />
+            <label className={labelClass}>Nome Completo *</label>
+            <input type="text" ref={nameRef} defaultValue={athlete ? `${athlete.name} ${athlete.lastName}` : ''} className={inputClass} placeholder="Nome Completo" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Posição</label>
-              <select ref={positionRef} defaultValue={athlete?.position} className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm">
-                <option>Goleiro</option><option>Lateral Esquerdo</option><option>Lateral Direito</option><option>Zagueiro</option><option>Volante</option><option>Meia</option><option>Extremo</option><option>Centroavante</option>
-              </select>
+          <div className={`grid grid-cols-1 gap-4 ${hasDualNationality ? 'sm:grid-cols-[1fr_1fr_auto_1fr]' : 'sm:grid-cols-[1fr_1fr_auto]'}`}>
+            <div className="min-w-0 space-y-1">
+              <label className={labelClass}>Data de Nascimento *</label>
+              <input type="date" ref={birthDateRef} defaultValue={athlete?.birthDate || ''} className={`${inputClass} [color-scheme:dark]`} />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <label className={labelClass}>Nacionalidade</label>
+              <CountrySelect value={nacionalidade} onChange={setNacionalidade} countries={NATIONALITY_COUNTRIES} className={inputClass} />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Categoria</label>
-              <select ref={categoryRef} defaultValue={athlete?.category} className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm">
-                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              <label className={labelClass}>Dupla Nacionalidade?</label>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setHasDualNationality(true)} className={`${toggleClass(hasDualNationality)} px-4`}>SIM</button>
+                <button type="button" onClick={() => setHasDualNationality(false)} className={`${toggleClass(!hasDualNationality)} px-4`}>NÃO</button>
+              </div>
+            </div>
+            {hasDualNationality && (
+              <div className="min-w-0 space-y-1">
+                <label className={labelClass}>Segunda Nacionalidade</label>
+                <CountrySelect value={secondNationality} onChange={setSecondNationality} countries={SECOND_NATIONALITY_COUNTRIES} align="right" className={inputClass} />
+              </div>
+            )}
+          </div>
+          <div className="space-y-1">
+            <label className={labelClass}>Cidade/Estado</label>
+            <input type="text" ref={naturalidadeRef} defaultValue={athlete?.naturalidade || ''} className={inputClass} placeholder="Ex.: Campinas/SP" />
+          </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label className={labelClass}>Altura (cm)</label>
+              <input type="number" min="0" step="1" ref={heightRef} defaultValue={athlete?.height ?? ''} className={inputClass} placeholder="Ex.: 180" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Peso (kg)</label>
+              <input type="number" min="0" step="0.1" ref={weightRef} defaultValue={athlete?.weight ?? ''} className={inputClass} placeholder="Ex.: 72" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Pé Dominante</label>
+              <select ref={preferredFootRef} defaultValue={athlete?.preferredFoot || ''} className={inputClass}>
+                <option value="">—</option>
+                {FEET.map(f => <option key={f}>{f}</option>)}
               </select>
             </div>
           </div>
+        </FormSection>
+
+        <FormSection title="Informações esportivas">
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Clube Atual</label>
+            <label className={labelClass}>Clube Atual</label>
             <div className="flex gap-4 items-center">
-              <input type="text" ref={clubRef} defaultValue={athlete?.club} className="flex-1 bg-surface-high text-white px-4 py-4 rounded-xl text-sm" placeholder="Nome do Clube" />
-              <button type="button" className="relative group" onClick={() => clubFileRef.current?.click()}>
-                <div className="w-14 h-14 rounded-xl overflow-hidden bg-surface-highest border border-white/10 flex items-center justify-center">
-                  {clubLogo ? <img src={clubLogo} alt="Logo" className="w-full h-full object-contain" /> : <ShieldCheck className="w-6 h-6 text-on-surface-variant" />}
+              <input type="text" ref={clubRef} defaultValue={athlete?.club} className={`flex-1 ${inputClass}`} placeholder="Nome do Clube" />
+              <button type="button" className="relative group" onClick={() => clubFileRef.current?.click()} aria-label="Escudo do clube">
+                <div className="flex h-[50px] w-[50px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-surface-high transition group-hover:border-white/40">
+                  {clubLogo ? <img src={clubLogo} alt="Logo" className="w-full h-full object-contain" /> : <ShieldCheck className="h-5 w-5 text-primary" />}
                 </div>
               </button>
             </div>
           </div>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-1">
+              <label className={labelClass}>Categoria *</label>
+              <select ref={categoryRef} defaultValue={athlete?.category || ''} className={inputClass}>
+                <option value="">Selecione</option>
+                {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Posição Principal *</label>
+              <select ref={positionRef} defaultValue={athlete?.position || ''} className={inputClass}>
+                <option value="">Selecione</option>
+                {POSITIONS.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Posição Secundária</label>
+              <select ref={secondaryPositionRef} defaultValue={athlete?.secondaryPosition || ''} className={inputClass}>
+                <option value="">—</option>
+                {POSITIONS.map(p => <option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+        </FormSection>
+
+        <FormSection title="Informações contratuais">
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Possui DVD?</label>
+            <label className={labelClass}>Tipo de Contrato</label>
             <div className="flex gap-4">
-              <button 
-                type="button" 
-                onClick={() => setHasDvd(true)} 
-                className={`flex-1 py-4 rounded-xl text-xs font-black transition-all tracking-widest ${hasDvd ? 'bg-primary text-background' : 'bg-surface-high text-white border border-white/5'}`}
-              >
-                SIM
-              </button>
-              <button 
-                type="button" 
-                onClick={() => { setHasDvd(false); setDvdLink(''); }} 
-                className={`flex-1 py-4 rounded-xl text-xs font-black transition-all tracking-widest ${!hasDvd ? 'bg-primary text-background' : 'bg-surface-high text-white border border-white/5'}`}
-              >
-                NÃO
-              </button>
+              {(['Profissional', 'Amador'] as const).map(level => (
+                <button key={level} type="button" onClick={() => setContractLevel(contractLevel === level ? '' : level)} className={toggleClass(contractLevel === level)}>
+                  {level.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass}>Contrato do Atleta</label>
+            <div className="flex gap-4">
+              {([['', 'SEM CONTRATO'], ['Field', 'COM A FIELD'], ['Clube', 'COM O CLUBE']] as const).map(([value, label]) => (
+                <button key={label} type="button" onClick={() => setContractType(value)} className={toggleClass(contractType === value)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {contractType && (
+            <div className="space-y-4">
+              {contractType === 'Clube' && (
+                <div className="space-y-1">
+                  <label className={labelClass}>Clube do Contrato</label>
+                  <input type="text" ref={contractClubRef} defaultValue={athlete?.contractClub || ''} className={inputClass} placeholder="Clube com o qual o atleta foi negociado" />
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className={labelClass}>Início do Contrato</label>
+                  <input type="date" ref={contractStartRef} defaultValue={athlete?.contractStart || ''} className={`${inputClass} [color-scheme:dark]`} />
+                </div>
+                <div className="space-y-1">
+                  <label className={labelClass}>Término do Contrato</label>
+                  <input type="date" ref={contractEndRef} defaultValue={athlete?.contractEnd || ''} className={`${inputClass} [color-scheme:dark]`} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Link do Contrato</label>
+                <input type="url" ref={contractLinkRef} defaultValue={athlete?.contractLink || ''} className={inputClass} placeholder="Link do documento (Google Drive, etc.)" />
+              </div>
+            </div>
+          )}
+        </FormSection>
+
+        <FormSection title="Contatos">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className={labelClass}>WhatsApp Atleta</label>
+              <input type="tel" ref={whatsappAthleteRef} defaultValue={athlete?.whatsappAthlete || ''} className={inputClass} placeholder="(11) 99999-9999" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>WhatsApp Responsável</label>
+              <input type="tel" ref={whatsappGuardianRef} defaultValue={athlete?.whatsappGuardian || ''} className={inputClass} placeholder="(11) 99999-9999" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass}>Possui Empresário?</label>
+            <div className="flex gap-4">
+              <button type="button" onClick={() => setHasAgent(true)} className={toggleClass(hasAgent)}>SIM</button>
+              <button type="button" onClick={() => setHasAgent(false)} className={toggleClass(!hasAgent)}>NÃO</button>
+            </div>
+          </div>
+          {hasAgent && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="space-y-1">
+                <label className={labelClass}>Empresa</label>
+                <input type="text" ref={agentCompanyRef} defaultValue={athlete?.agentCompany || ''} className={inputClass} placeholder="Nome da empresa" />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Nome do Empresário</label>
+                <input type="text" ref={agentNameRef} defaultValue={athlete?.agentName || ''} className={inputClass} placeholder="Nome do empresário" />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>WhatsApp Empresário</label>
+                <input type="tel" ref={whatsappAgentRef} defaultValue={athlete?.whatsappAgent || ''} className={inputClass} placeholder="(11) 99999-9999" />
+              </div>
+            </div>
+          )}
+        </FormSection>
+
+        <FormSection title="Outras informações">
+          <div className="space-y-2">
+            <label className={labelClass}>Possui DVD?</label>
+            <div className="flex gap-4">
+              <button type="button" onClick={() => setHasDvd(true)} className={toggleClass(hasDvd)}>SIM</button>
+              <button type="button" onClick={() => { setHasDvd(false); setDvdLink(''); }} className={toggleClass(!hasDvd)}>NÃO</button>
             </div>
           </div>
 
           {hasDvd ? (
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Link do DVD</label>
-              <input 
-                type="text" 
-                value={dvdLink} 
-                onChange={(e) => setDvdLink(e.target.value)} 
-                className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm border border-white/5 focus:border-primary/50 transition-colors" 
-                placeholder="Link do vídeo (YouTube, Vimeo...)" 
+              <label className={labelClass}>Link do DVD</label>
+              <input
+                type="text"
+                value={dvdLink}
+                onChange={(e) => setDvdLink(e.target.value)}
+                className={inputClass}
+                placeholder="Link do vídeo (YouTube, Vimeo...)"
               />
             </div>
           ) : (
-            <div className="p-4 bg-error/10 border border-error/20 rounded-xl">
+            <div className="rounded-xl border border-error/20 bg-error/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-error italic text-center">
                 Iniciar com urgência processo de confecção.
               </p>
             </div>
           )}
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-on-surface-variant ml-1">Observações</label>
-            <textarea ref={notesRef} defaultValue={athlete?.notes} rows={4} className="w-full bg-surface-high text-white px-4 py-4 rounded-xl text-sm resize-none" placeholder="Observações..." />
-          </div>
-        </div>
+        </FormSection>
       </div>
-      <div className="mt-12 pt-12 border-t border-white/5 flex gap-4">
-        <button onClick={handleSubmit} className="flex-1 py-5 bg-primary text-background font-black text-sm rounded-2xl uppercase tracking-widest shadow-2xl">SALVAR</button>
+      <div className="mt-10 flex gap-4">
+        <button onClick={handleSubmit} className="flex-1 rounded-2xl bg-primary py-5 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-[0_12px_32px_rgba(255,255,255,0.12)] transition hover:scale-[1.01]">Salvar atleta</button>
         {athlete && onDelete ? (
           <button 
             type="button"
@@ -259,12 +376,12 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
                 onDelete(athlete.id);
               }
             }} 
-            className="px-8 py-5 bg-error/10 text-error hover:bg-error/20 font-black text-sm rounded-2xl uppercase tracking-widest transition-colors"
+            className="rounded-2xl border border-error/20 bg-error/10 px-8 py-5 text-[11px] font-black uppercase tracking-[0.2em] text-error transition hover:bg-error/20"
           >
             APAGAR ATLETA
           </button>
         ) : (
-          <button onClick={onBack} className="px-8 py-5 bg-surface-high text-white font-black text-sm rounded-2xl uppercase tracking-widest">CANCELAR</button>
+          <button onClick={onBack} className="rounded-2xl border border-white/10 bg-surface-high px-8 py-5 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:border-white/20">Cancelar</button>
         )}
       </div>
     </div>

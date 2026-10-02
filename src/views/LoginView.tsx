@@ -64,11 +64,11 @@ export const LoginView = ({ onLogin, onForgot }: LoginViewProps) => {
           <div className="space-y-2">
             <label className="text-sm font-black tracking-widest text-on-surface-variant uppercase ml-1">Username</label>
             <div className="relative">
-              <Users className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-on-surface-variant" />
+              <Users className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-outline" />
               <input 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-surface-high border-none text-white h-16 pl-16 pr-6 rounded-xl focus:ring-2 focus:ring-primary transition-all placeholder:text-white/20 text-lg" 
+                className="w-full bg-primary border-none text-background h-16 pl-16 pr-6 rounded-xl focus:ring-2 focus:ring-accent transition-all placeholder:text-background/40 text-lg" 
                 placeholder="atleta@pro.com" 
                 type="text"
               />
@@ -78,18 +78,18 @@ export const LoginView = ({ onLogin, onForgot }: LoginViewProps) => {
           <div className="space-y-2">
             <label className="text-sm font-black tracking-widest text-on-surface-variant uppercase ml-1">Password</label>
             <div className="relative">
-              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-on-surface-variant" />
+              <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-6 h-6 text-outline" />
               <input 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-surface-high border-none text-white h-16 pl-16 pr-16 rounded-xl focus:ring-2 focus:ring-primary transition-all placeholder:text-white/20 text-lg" 
+                className="w-full bg-primary border-none text-background h-16 pl-16 pr-16 rounded-xl focus:ring-2 focus:ring-accent transition-all placeholder:text-background/40 text-lg" 
                 placeholder="••••••••" 
                 type={showPassword ? 'text' : 'password'}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-on-surface-variant"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-outline"
                 aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
               >
                 {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
@@ -130,7 +130,8 @@ export const LoginView = ({ onLogin, onForgot }: LoginViewProps) => {
               <div className="w-full flex justify-center items-center gap-1">
                 <span className="text-[16px] text-on-surface-variant font-black tracking-widest">F1eld</span>
                 <span className="text-[16px] text-on-surface-variant font-black tracking-widest">Pró</span>
-                <span className="text-[16px] text-on-surface-variant font-black tracking-widest">Atletas - Attiva Sports</span>
+                <span className="text-[16px] text-on-surface-variant font-black tracking-widest">Atletas -</span>
+                <span className="text-[16px] text-accent font-black tracking-widest">Attiva Sports</span>
               </div>
             </div>
           </div>
