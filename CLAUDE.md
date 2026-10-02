@@ -63,13 +63,15 @@ src/
 - O banco usa `snake_case` e o tipo `Athlete` usa `camelCase`. O mapeamento é manual em `App.tsx` (`last_name` ↔ `lastName`, `club_logo` ↔ `clubLogo`, `birth_date` ↔ `birthDate`, `preferred_foot` ↔ `preferredFoot`, `has_dvd` ↔ `hasDvd`, `dvd_link` ↔ `dvdLink`). Ao adicionar um campo, atualizar o tipo, o payload de gravação e todos os pontos de leitura.
 - Sempre checar `hasSupabaseConfig` antes de usar `supabase` (ele é `null` sem as variáveis de ambiente). Sem configuração o app fica na tela de login.
 - Ids de atletas reais são UUID; ids que não são UUID (mocks ou `local-...`) são tratados só em memória e viram `insert` ao salvar.
-- Criar ou editar um atleta registra uma linha em `recent_activities` via `recordActivity`.
+- Criar ou editar um atleta registra uma linha em `recent_activities` via `recordActivity`, somente depois de confirmada a gravação.
+- Quando o RLS bloqueia um `update` ou `delete`, o Supabase não retorna erro, só altera zero linhas. Todo `update`/`delete` deve terminar com `.select()` e tratar retorno vazio como ação não permitida: mostrar a mensagem de `notAllowedMessage` e não atualizar o estado local, não fechar o modal nem registrar atividade. No `insert`, o bloqueio vem como erro de código `42501` e recebe a mesma mensagem.
 
 ### Autenticação
 
 - Login via Supabase Auth (e-mail e senha). Além da sessão do Supabase, o app exige a flag `fieldpro_authenticated_v1` no `localStorage`, gravada em `LoginView` e removida em `clearAppAuth`.
 - Links de recuperação de senha são detectados pela URL e levam à view `security`.
-- Cadastro e edição de atletas pedem uma senha de administrador fixa no código (`ADMIN_ACCESS_PASSWORD` em `App.tsx`). É uma barreira só de interface, não uma proteção real.
+- O papel do usuário vem de `session.user.app_metadata.role` (`isAdmin` em `App.tsx`). Só `admin` cria, edita e apaga atletas; usuários comuns só leem. Quem impõe isso é o RLS do banco: a interface apenas esconde os botões de adicionar, editar e excluir de quem não é administrador. Não usar senha fixa no código nem `window.prompt` para liberar acesso.
+- O papel vem do JWT: se o `role` de alguém for alterado no Supabase, a pessoa precisa sair e entrar de novo para a interface refletir a mudança.
 
 ### Estilo e idioma
 

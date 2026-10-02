@@ -28,7 +28,9 @@ import { SessionsView } from './views/SessionsView';
 import { CalendarView } from './views/CalendarView';
 
 const AUTH_SESSION_KEY = 'fieldpro_authenticated_v1';
-const ADMIN_ACCESS_PASSWORD = '1234';
+const RLS_VIOLATION_CODE = '42501';
+const notAllowedMessage = (action: string) =>
+  `Ação não permitida: seu usuário não tem permissão para ${action} atletas. Nenhuma alteração foi salva.`;
 
 export default function App() {
   const [view, setView] = useState<View>('login');
@@ -40,7 +42,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [session, setSession] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
-  const [adminPasswordPromptOpen, setAdminPasswordPromptOpen] = useState(false);
+  const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [profileDetailView, setProfileDetailView] = useState<'documents' | 'calendar' | 'business' | 'profile' | 'status' | null>(null);
   const athleteImageInputRef = useRef<HTMLInputElement | null>(null);
   const clubLogoInputRef = useRef<HTMLInputElement | null>(null);
@@ -357,6 +359,11 @@ export default function App() {
   };
 
   const handleSaveAthlete = async (athleteData: Partial<Athlete>) => {
+    if (!isAdmin) {
+      alert(notAllowedMessage(selectedAthlete ? 'editar' : 'cadastrar'));
+      return;
+    }
+
     if (!hasSupabaseConfig || !supabase) {
       const nextAthlete: Athlete = {
         id: `local-${Date.now()}`,
@@ -425,11 +432,20 @@ export default function App() {
 
     if (isEditingRealAthlete) {
       console.log('Atualizando atleta real com ID:', selectedAthlete.id);
-      const { error: updateError } = await supabase
+      const { data: updatedData, error: updateError } = await supabase
         .from('athletes')
         .update(payload)
-        .eq('id', selectedAthlete.id);
+        .eq('id', selectedAthlete.id)
+        .select();
       error = updateError;
+
+      // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+      if (!error && (!updatedData || updatedData.length === 0)) {
+        console.error('Atualização bloqueada: nenhuma linha afetada para o ID', selectedAthlete.id);
+        alert(notAllowedMessage('editar'));
+        setLoading(false);
+        return;
+      }
 
       if (!error) {
         const isNewDvd = athleteData.hasDvd && !selectedAthlete.hasDvd;
@@ -464,7 +480,11 @@ export default function App() {
 
     if (error) {
       console.error('Erro ao salvar atleta:', error);
-      alert(`Erro ao salvar atleta: ${error.message}`);
+      if (error.code === RLS_VIOLATION_CODE) {
+        alert(notAllowedMessage(isEditingRealAthlete ? 'editar' : 'cadastrar'));
+      } else {
+        alert(`Erro ao salvar atleta: ${error.message}`);
+      }
     } else {
       console.log('Atleta salvo com sucesso!');
       setSelectedAthlete(null);
@@ -492,6 +512,11 @@ export default function App() {
   };
 
   const handleDeleteAthlete = async (id: string) => {
+    if (!isAdmin) {
+      alert(notAllowedMessage('excluir'));
+      return;
+    }
+
     if (!hasSupabaseConfig || !supabase) {
       setAthletes(prev => prev.filter(a => a.id !== id));
       setSelectedAthlete(null);
@@ -506,11 +531,19 @@ export default function App() {
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
     
     if (isUuid) {
-      const { error } = await supabase.from('athletes').delete().eq('id', id);
-      
+      const { data: deletedData, error } = await supabase.from('athletes').delete().eq('id', id).select();
+
       if (error) {
         console.error('Erro ao apagar atleta do banco:', error);
-        alert(`Erro ao apagar atleta: ${error.message}`);
+        alert(error.code === RLS_VIOLATION_CODE ? notAllowedMessage('excluir') : `Erro ao apagar atleta: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // RLS bloqueia o delete sem retornar erro: nenhuma linha é apagada
+      if (!deletedData || deletedData.length === 0) {
+        console.error('Exclusão bloqueada: nenhuma linha afetada para o ID', id);
+        alert(notAllowedMessage('excluir'));
         setLoading(false);
         return;
       }
@@ -543,18 +576,8 @@ export default function App() {
     setLoading(false);
   };
 
-  const requestEditAthleteAccess = () => {
-    if (!selectedAthlete) {
-      return;
-    }
-
-    const enteredPassword = window.prompt('Digite a senha de administrador para editar este atleta:');
-    if (enteredPassword === null) {
-      return;
-    }
-
-    if (enteredPassword !== ADMIN_ACCESS_PASSWORD) {
-      window.alert('Senha incorreta. Acesso negado.');
+  const openEditAthlete = () => {
+    if (!selectedAthlete || !isAdmin) {
       return;
     }
 
@@ -562,20 +585,13 @@ export default function App() {
     setIsEditingAthlete(true);
   };
 
-  const requestAdminAccess = () => {
-    const enteredPassword = window.prompt('Digite a senha de administrador para cadastrar um atleta:');
-    if (enteredPassword === null) {
-      return;
-    }
-
-    if (enteredPassword !== ADMIN_ACCESS_PASSWORD) {
-      window.alert('Senha incorreta. Acesso negado.');
+  const openAddAthlete = () => {
+    if (!isAdmin) {
       return;
     }
 
     setSelectedAthlete(null);
     setIsAddingAthlete(true);
-    setAdminPasswordPromptOpen(false);
   };
 
   const handleAthleteImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -610,7 +626,7 @@ export default function App() {
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
       case 'dashboard': return <DashboardView athletes={athletes} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} />;
-      case 'athletes': return <AthletesListView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={requestAdminAccess} />;
+      case 'athletes': return <AthletesListView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'negociados': return <NegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'agenciados-negociados': return <AgenciadosNegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
@@ -699,13 +715,15 @@ export default function App() {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={requestEditAthleteAccess}
-                  className="mr-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary transition hover:bg-primary/20"
-                >
-                  Editar perfil
-                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={openEditAthlete}
+                    className="mr-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary transition hover:bg-primary/20"
+                  >
+                    Editar perfil
+                  </button>
+                )}
               </div>
 
               <input
@@ -737,7 +755,7 @@ export default function App() {
         </div>
       ) : null}
 
-      {(selectedAthlete && isEditingAthlete) || isAddingAthlete ? (
+      {isAdmin && ((selectedAthlete && isEditingAthlete) || isAddingAthlete) ? (
         <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
           <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
             <button
@@ -757,7 +775,7 @@ export default function App() {
               <EditProfileView 
                 athlete={selectedAthlete || undefined} 
                 onSave={handleSaveAthlete} 
-                onDelete={handleDeleteAthlete}
+                onDelete={isAdmin ? handleDeleteAthlete : undefined}
                 onBack={closeAthleteModal} 
                 athletes={athletes} 
               />

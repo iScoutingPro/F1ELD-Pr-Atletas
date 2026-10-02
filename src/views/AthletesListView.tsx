@@ -9,7 +9,7 @@ const POSITIONS = ['Goleiro', 'Lateral Esquerdo', 'Lateral Direito', 'Zagueiro',
 interface AthletesListViewProps {
   athletes: Athlete[];
   onSelectAthlete: (athlete: Athlete) => void;
-  onAddAthlete: () => void;
+  onAddAthlete?: () => void;
 }
 
 export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete }: AthletesListViewProps) => {
@@ -53,9 +53,11 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete }: At
           <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">Atletas Agenciados</h2>
           <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">com atletas captados</span>
         </div>
-        <button onClick={onAddAthlete} className="p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
-          <Plus className="w-6 h-6" />
-        </button>
+        {onAddAthlete && (
+          <button onClick={onAddAthlete} className="p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
+            <Plus className="w-6 h-6" />
+          </button>
+        )}
       </div>
 
       <div className="space-y-4">
