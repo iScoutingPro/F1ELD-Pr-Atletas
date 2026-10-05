@@ -3,7 +3,6 @@ import { ScoutEntry } from './types';
 // Dados da partida de cada lançamento de scout (texto livre, como na planilha do usuário)
 export const SCOUT_INFO_FIELDS = [
   { key: 'year', label: 'Ano' },
-  { key: 'analyst', label: 'Analista' },
   { key: 'team', label: 'Equipe do Atleta' },
   { key: 'matchDate', label: 'Data/Horário da Partida' },
   { key: 'competition', label: 'Competição' },

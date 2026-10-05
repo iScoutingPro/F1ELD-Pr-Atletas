@@ -70,6 +70,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   const [venue, setVenue] = useState(game?.venue || '');
   const [category, setCategory] = useState(game?.category || '');
   const [competition, setCompetition] = useState(game?.competition || '');
+  const [round, setRound] = useState(game?.round || '');
   const [athleteIds, setAthleteIds] = useState<string[]>(game?.athleteIds || []);
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
@@ -99,7 +100,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
       const value = game?.athleteMinutes?.[id] || 0;
       if (value > 0) athleteMinutes[id] = value;
     });
-    const saved = await onSave({ date, time, home, away, venue, category, competition, athleteIds, athleteMinutes }, game?.id);
+    const saved = await onSave({ date, time, home, away, venue, category, competition, round, athleteIds, athleteMinutes }, game?.id);
     setSaving(false);
     if (saved) onClose();
   };
@@ -169,9 +170,15 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className={labelClass}>Local</label>
-            <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputClass} placeholder="Estádio ou centro de treinamento" />
+          <div className="grid gap-4 sm:grid-cols-[11rem_1fr] [&>*]:min-w-0">
+            <div className="space-y-1">
+              <label className={labelClass}>Rodada</label>
+              <input type="text" value={round} onChange={(e) => setRound(e.target.value)} className={inputClass} placeholder="Ex.: 3 ou Semi-Final" />
+            </div>
+            <div className="space-y-1">
+              <label className={labelClass}>Local</label>
+              <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputClass} placeholder="Estádio ou centro de treinamento" />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -442,6 +449,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                           <Trophy className="h-3.5 w-3.5 shrink-0 text-primary" />
                           <p className="min-w-0 break-words text-[9px] font-black uppercase leading-tight tracking-[0.24em] text-primary">
                             {game.competition || 'Jogo'}
+                            {game.round && <span className="text-on-surface-variant"> · {/^\d+$/.test(game.round) ? `Rodada ${game.round}` : game.round}</span>}
                           </p>
                         </div>
                         {game.category && (

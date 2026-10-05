@@ -66,6 +66,7 @@ const mapGameRow = (g: any): Game => ({
   venue: g.venue || undefined,
   category: g.category || undefined,
   competition: g.competition || undefined,
+  round: g.round || undefined,
   athleteIds: g.athlete_ids || [],
   athleteMinutes: g.athlete_minutes || {},
   athleteScouts: g.athlete_scouts || {},
@@ -89,6 +90,7 @@ const scoutErrorNotice = (title: string, error: { code?: string; message: string
 const mapScoutRow = (s: any): ScoutEntry => ({
   id: s.id,
   athleteId: s.athlete_id,
+  gameId: s.game_id || undefined,
   year: s.season || '',
   analyst: s.analyst || '',
   team: s.team || '',
@@ -110,6 +112,8 @@ const scoutPayload = (entry: ScoutEntryInput) => ({
   round: entry.round || null,
   match: entry.match || null,
   stats: entry.stats,
+  // Só vai quando a linha veio de um jogo do Calendário, para lançamento à mão continuar salvando sem a coluna game_id
+  ...(entry.gameId ? { game_id: entry.gameId } : {}),
 });
 
 // Traduz o erro do Supabase para um aviso legível na interface
@@ -796,8 +800,13 @@ export default function App() {
     const hadMinutes = Object.keys(games.find(g => g.id === id)?.athleteMinutes || {}).length > 0;
     const sendMinutes = hadMinutes || Object.keys(gameData.athleteMinutes).length > 0;
 
+    // O mesmo vale para a rodada: só vai quando foi preenchida ou quando o jogo já tinha uma
+    const round = gameData.round?.trim() || '';
+    const sendRound = Boolean(round) || Boolean(games.find(g => g.id === id)?.round);
+
     const payload = {
       ...(sendMinutes ? { athlete_minutes: gameData.athleteMinutes } : {}),
+      ...(sendRound ? { round: round || null } : {}),
       game_date: gameData.date,
       game_time: gameData.time || null,
       home: gameData.home.trim(),

@@ -1,4 +1,4 @@
--- Lançamentos de scout (aba "Scout"): uma linha por atleta em cada partida, sem vínculo com os jogos do Calendário.
+-- Lançamentos de scout (aba "Scout"): uma linha por atleta em cada partida.
 -- Rodar no SQL Editor do Supabase antes de usar o botão "Adicionar scout".
 -- Pode ser rodado de novo sem risco: não apaga nem altera lançamentos já gravados.
 create table if not exists public.scout_entries (
@@ -17,6 +17,9 @@ create table if not exists public.scout_entries (
   stats jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+
+-- Jogo do Calendário (tabela games) de onde o lançamento veio; vazio quando foi lançado à mão
+alter table public.scout_entries add column if not exists game_id uuid;
 
 create index if not exists scout_entries_athlete_id_idx on public.scout_entries (athlete_id);
 

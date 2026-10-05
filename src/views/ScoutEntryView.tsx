@@ -3,10 +3,13 @@ import { createPortal } from 'react-dom';
 import { ClipboardList, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { Athlete, Game, ScoutEntry, ScoutEntryInput } from '../types';
 import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, formatScoutValue, sortScoutEntries } from '../scout';
+import { SheetSelect, normalize } from '../components/SheetSelect';
+import { ScoutOverview } from '../components/ScoutOverview';
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
 
-// Linha da planilha: chave da coluna -> texto digitado (na coluna Atleta, o id do atleta escolhido)
+// Linha da planilha: chave da coluna -> texto digitado (na coluna Atleta, o id do atleta escolhido).
+// gameId, fora das colunas, marca a linha que veio de um jogo do Calendário
 type Row = Record<string, string>;
 
 interface Column {
@@ -19,8 +22,7 @@ interface Column {
 }
 
 const INFO_WIDTHS: Record<string, string> = {
-  year: 'min-w-[4.5rem]',
-  analyst: 'min-w-[8rem]',
+  year: 'min-w-[6.5rem]',
   team: 'min-w-[11rem]',
   matchDate: 'min-w-[9rem]',
   competition: 'min-w-[12rem]',
@@ -32,9 +34,9 @@ const infoColumn = ({ key, label }: { key: string; label: string }): Column => (
 
 // Mesma ordem de colunas da planilha do usuário
 const COLUMNS: Column[] = [
-  ...SCOUT_INFO_FIELDS.slice(0, 2).map(infoColumn),
-  { key: 'athlete', label: 'Atleta', kind: 'athlete', width: 'min-w-[12rem]' },
-  ...SCOUT_INFO_FIELDS.slice(2).map(infoColumn),
+  ...SCOUT_INFO_FIELDS.slice(0, 1).map(infoColumn),
+  { key: 'athlete', label: 'Atleta', kind: 'athlete', width: 'min-w-[15rem]' },
+  ...SCOUT_INFO_FIELDS.slice(1).map(infoColumn),
   ...SCOUT_FIELDS.map((field): Column => ({ key: field.key, label: field.label, kind: field.calc ? 'calc' : 'number', width: 'min-w-[4rem]', field })),
 ];
 
@@ -42,6 +44,19 @@ const COLUMNS: Column[] = [
 const SHEET_COLUMNS = COLUMNS.filter((column) => column.kind !== 'calc');
 
 const BLANK_ROWS = 8;
+// Linhas em branco depois das que vêm do Calendário
+const EXTRA_BLANK_ROWS = 2;
+
+const todayKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+// Data e horário do jogo no formato da planilha do usuário: "03.01 às 13h00"
+const matchDateText = (date: string, time?: string) => {
+  const [, month, day] = date.split('-');
+  return `${day}.${month}${time ? ` às ${time.slice(0, 5).replace(':', 'h')}` : ''}`;
+};
 
 interface ScoutEntryViewProps {
   entries: ScoutEntry[];
@@ -58,9 +73,6 @@ const cleanValue = (column: Column, value: string) => (column.kind === 'number' 
 
 const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
 
-// Compara nomes sem acento, sem diferença de maiúsculas e sem espaços sobrando
-const normalize = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
-
 // Números digitados na linha, para gravar e para as colunas calculadas
 const rowStats = (row: Row): Record<string, number> =>
   Object.fromEntries(SCOUT_FIELDS.filter(({ key, calc }) => !calc && (row[key] || '') !== '').map(({ key }) => [key, Number(row[key])]));
@@ -72,7 +84,23 @@ const uniqueSorted = (values: (string | undefined)[]) =>
   [...new Set<string>(values.map((value) => (value || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
 const NO_CLUB = 'Sem Clube';
-const OTHER = '__outra__';
+
+// Competição com a categoria no nome, como o usuário escreve na planilha ("Campeonato Paulista Sub-17").
+// Os jogos do Calendário guardam a categoria num campo separado; Profissional não entra no nome
+const withCategory = (competition?: string, category?: string) => {
+  const name = (competition || '').trim();
+  const suffix = (category || '').trim();
+  if (!name || !suffix || suffix === 'Profissional' || normalize(name).includes(normalize(suffix))) return name;
+  return `${name} ${suffix}`;
+};
+
+// Competições da categoria do atleta primeiro, mantendo a ordem alfabética dentro de cada grupo
+const categoryFirst = (options: string[], category?: string) => {
+  const suffix = normalize(category || '');
+  if (!suffix || suffix === 'profissional') return options;
+  const matches = (option: string) => normalize(option).includes(suffix);
+  return [...options.filter(matches), ...options.filter((option) => !matches(option))];
+};
 
 interface ChoiceCellProps {
   value: string;
@@ -100,7 +128,7 @@ const ChoiceCell = ({ value, options, allowOther, onChange, label, className }: 
         aria-label={label}
         title={label}
         placeholder="Digite"
-        className={className}
+        className={`${className} border-primary font-bold`}
       />
     );
   }
@@ -108,31 +136,24 @@ const ChoiceCell = ({ value, options, allowOther, onChange, label, className }: 
   // Valor já gravado que não está na lista continua aparecendo
   const list = value && !options.includes(value) ? [value, ...options] : options;
   return (
-    <select
+    <SheetSelect
       value={value}
-      onChange={(event) => {
-        if (event.target.value === OTHER) {
-          onChange('');
-          setTyping(true);
-        } else {
-          onChange(event.target.value);
-        }
-      }}
-      aria-label={label}
-      title={label}
+      options={list.map((option) => ({ value: option, label: option }))}
+      onChange={onChange}
+      onOther={allowOther ? () => { onChange(''); setTyping(true); } : undefined}
+      label={label}
       className={className}
-    >
-      <option value="">Selecione</option>
-      {list.map((option) => <option key={option} value={option}>{option}</option>)}
-      {allowOther && <option value={OTHER}>Outra…</option>}
-    </select>
+    />
   );
 };
+
+// Linha do Calendário em que nenhum número foi digitado: não é salva e volta na próxima vez
+const isUntouchedGameRow = (row: Row) => Boolean(row.gameId) && Object.keys(rowStats(row)).length === 0;
 
 const isEmptyRow = (row: Row) => SHEET_COLUMNS.every(({ key }) => (row[key] || '').trim() === '');
 
 // Lançamento do scout (só admin): o botão abre uma planilha, uma linha por atleta em cada partida,
-// e a tela lista embaixo tudo o que já foi lançado. Não depende dos jogos do Calendário.
+// e a tela lista embaixo tudo o que já foi lançado. A planilha já abre com os jogos do Calendário que aguardam scout.
 // O lançamento é só no computador: no celular (abaixo de sm) o botão, o lápis e a lixeira somem e fica só a tabela
 export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: ScoutEntryViewProps) => {
   const [rows, setRows] = useState<Row[]>([]);
@@ -167,11 +188,52 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
         allowOther: true,
       },
       competition: {
-        options: uniqueSorted([...games.map((game) => game.competition), ...entries.map((entry) => entry.competition), ...rows.map((row) => row.competition)]),
+        options: uniqueSorted([...games.map((game) => withCategory(game.competition, game.category)), ...entries.map((entry) => entry.competition), ...rows.map((row) => row.competition)]),
         allowOther: true,
       },
     };
   }, [athletes, entries, games, rows]);
+
+  // Jogos do Calendário já realizados que ainda não têm scout: uma linha por atleta vinculado, do jogo mais antigo para o mais novo,
+  // já com ano, equipe, data, competição e partida. O jogo sai da lista quando o scout daquele atleta é salvo
+  const pendingRows = useMemo(() => {
+    const today = todayKey();
+    const done = new Set(entries.filter((entry) => entry.gameId).map((entry) => `${entry.gameId}|${entry.athleteId}`));
+    return [...games]
+      .filter((game) => game.date <= today)
+      .sort((a, b) => `${a.date} ${a.time || ''}`.localeCompare(`${b.date} ${b.time || ''}`))
+      .flatMap((game) => game.athleteIds
+        .filter((id) => athleteById.has(id) && !done.has(`${game.id}|${id}`))
+        .map((id): Row => {
+          const club = athleteById.get(id)!.club;
+          return {
+            gameId: game.id,
+            athlete: id,
+            year: game.date.slice(0, 4),
+            team: club && club !== NO_CLUB ? club : '',
+            matchDate: matchDateText(game.date, game.time),
+            competition: withCategory(game.competition, game.category),
+            round: game.round || '',
+            match: `${game.home} x ${game.away}`,
+          };
+        }));
+  }, [games, entries, athleteById]);
+
+  // Jogos do Calendário que ainda não entram na planilha, para o topo da aba explicar o motivo:
+  // os de data futura (entram no dia do jogo) e os já realizados sem atleta vinculado
+  const waitingGames = useMemo(() => {
+    const today = todayKey();
+    const linked = (game: Game) => game.athleteIds.some((id) => athleteById.has(id));
+    return {
+      future: games.filter((game) => game.date > today && linked(game)).length,
+      withoutAthletes: games.filter((game) => game.date <= today && !linked(game)).length,
+    };
+  }, [games, athleteById]);
+  const calendarStatus = [
+    pendingRows.length > 0 && `${pendingRows.length} ${pendingRows.length === 1 ? 'scout pendente' : 'scouts pendentes'}`,
+    waitingGames.future > 0 && `${waitingGames.future} ${waitingGames.future === 1 ? 'jogo futuro entra' : 'jogos futuros entram'} na data do jogo`,
+    waitingGames.withoutAthletes > 0 && `${waitingGames.withoutAthletes} ${waitingGames.withoutAthletes === 1 ? 'jogo' : 'jogos'} sem atleta vinculado`,
+  ].filter(Boolean);
 
   // Ao escolher o atleta, a linha já vem com o ano atual, o clube do cadastro e a competição do último scout dele
   const pickAthlete = (rowIndex: number, athleteId: string) => {
@@ -191,12 +253,13 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     setEditing(entry || null);
     setSheetError('');
     if (entry) {
-      const row: Row = { athlete: athleteById.has(entry.athleteId) ? entry.athleteId : '' };
+      const row: Row = { athlete: athleteById.has(entry.athleteId) ? entry.athleteId : '', gameId: entry.gameId || '' };
       SCOUT_INFO_FIELDS.forEach(({ key }) => { row[key] = entry[key]; });
       Object.entries(entry.stats).forEach(([key, value]) => { row[key] = String(value); });
       setRows([row]);
     } else {
-      setRows(Array.from({ length: BLANK_ROWS }, () => ({})));
+      // Primeiro os jogos do Calendário que aguardam scout, depois linhas em branco para lançar à mão
+      setRows([...pendingRows.map((row) => ({ ...row })), ...Array.from({ length: pendingRows.length > 0 ? EXTRA_BLANK_ROWS : BLANK_ROWS }, () => ({}))]);
     }
     setSheetOpen(true);
   };
@@ -217,9 +280,9 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
 
   const handleSave = async () => {
     if (saving) return;
-    const filled = rows.filter((row) => !isEmptyRow(row));
+    const filled = rows.filter((row) => !isEmptyRow(row) && !isUntouchedGameRow(row));
     if (filled.length === 0) {
-      setSheetError('Preencha pelo menos uma linha.');
+      setSheetError(rows.some(isUntouchedGameRow) ? 'Preencha os números de pelo menos uma linha.' : 'Preencha pelo menos uma linha.');
       return;
     }
 
@@ -231,8 +294,10 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     const info = (row: Row, key: string) => (row[key] || '').trim();
     const inputs: ScoutEntryInput[] = filled.map((row) => ({
       athleteId: row.athlete,
+      gameId: row.gameId || undefined,
       year: info(row, 'year'),
-      analyst: info(row, 'analyst'),
+      // A coluna Analista saiu da planilha; lançamento antigo mantém o que já tinha
+      analyst: editing?.analyst || '',
       team: info(row, 'team'),
       matchDate: info(row, 'matchDate'),
       competition: info(row, 'competition'),
@@ -279,11 +344,13 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
           <div className="flex flex-wrap items-center gap-3">
             <ClipboardList className="h-5 w-5 text-primary" />
             <h2 className="text-2xl font-black uppercase italic tracking-tight text-white">Scout</h2>
-            <span className="rounded-full border border-white/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Só administradores</span>
           </div>
-          <p className="mt-2 text-sm text-white/70 max-sm:hidden">Clique em "Adicionar scout" para abrir a planilha. Cada linha é um atleta numa partida.</p>
-          <p className="mt-2 text-sm text-white/70 sm:hidden">Números lançados. Para adicionar ou alterar, use o computador.</p>
         </div>
+        {calendarStatus.length > 0 && (
+          <p className="ml-auto text-right text-[9px] font-black uppercase leading-relaxed tracking-[0.2em] text-on-surface-variant max-sm:hidden">
+            <span className="text-white">Calendário</span> · {calendarStatus.join(' · ')}
+          </p>
+        )}
         <button
           type="button"
           onClick={() => openSheet()}
@@ -293,6 +360,8 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
           Adicionar scout
         </button>
       </section>
+
+      <ScoutOverview entries={entries} athletes={athletes} />
 
       <section className={`${panelClass} p-4`}>
         <div className="flex flex-wrap items-center justify-between gap-3 px-1">
@@ -395,7 +464,9 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
               <p className="mt-2 text-sm text-white/70">
                 {editing
                   ? 'Altere as informações do lançamento e salve.'
-                  : 'Preencha uma linha por atleta em cada partida. Ao escolher o atleta, o ano, a equipe e a competição já vêm preenchidos; confira e troque se for outro. Totais e percentuais não são preenchidos: o app calcula e mostra na tabela.'}
+                  : pendingRows.length > 0
+                    ? 'Os jogos do Calendário já realizados vêm no início, com os dados da partida preenchidos: complete o placar em "Partida" e os números. Linha de jogo sem nenhum número não é salva e volta na próxima vez.'
+                    : 'Preencha uma linha por atleta em cada partida. Ao escolher o atleta, o ano, a equipe e a competição já vêm preenchidos; confira e troque se for outro. Totais e percentuais não são preenchidos: o app calcula e mostra na tabela.'}
               </p>
             </div>
 
@@ -413,32 +484,29 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                   {rows.map((row, rowIndex) => {
                     // Linha com algo preenchido e sem atleta escolhido fica marcada
                     const athleteMissing = !isEmptyRow(row) && !row.athlete;
-                    const inputClass = 'h-9 w-full rounded-lg border bg-surface-high px-2 text-center text-sm text-white outline-none transition focus:bg-white/10';
+                    const untouched = isUntouchedGameRow(row);
+                    const inputClass = 'h-10 w-full rounded-xl border bg-white/[0.04] px-2.5 text-center text-sm text-white outline-none transition focus:border-primary focus:bg-white/10';
                     return (
-                      <tr key={rowIndex}>
+                      <tr key={rowIndex} title={untouched ? 'Jogo do Calendário aguardando os números' : undefined}>
                         {SHEET_COLUMNS.map((column) => (
                           <td key={column.key} className="px-0.5 py-1">
                             {column.kind === 'athlete' ? (
-                              <select
+                              <SheetSelect
                                 value={row.athlete || ''}
-                                onChange={(event) => pickAthlete(rowIndex, event.target.value)}
-                                aria-label={`Atleta, linha ${rowIndex + 1}`}
-                                title={athleteMissing ? 'Escolha o atleta' : column.label}
-                                className={`${inputClass} ${column.width} font-bold ${athleteMissing ? 'border-error/60 focus:border-error' : 'border-white/10 focus:border-primary'}`}
-                              >
-                                <option value="">Selecione</option>
-                                {athleteOptions.map((athlete) => (
-                                  <option key={athlete.id} value={athlete.id}>{fullName(athlete)}</option>
-                                ))}
-                              </select>
+                                options={athleteOptions.map((athlete) => ({ value: athlete.id, label: fullName(athlete) }))}
+                                onChange={(value) => pickAthlete(rowIndex, value)}
+                                label={`Atleta, linha ${rowIndex + 1}`}
+                                invalid={athleteMissing}
+                                className={`${inputClass} ${column.width}`}
+                              />
                             ) : choices[column.key] ? (
                               <ChoiceCell
                                 value={row[column.key] || ''}
-                                options={choices[column.key].options}
+                                options={column.key === 'competition' ? categoryFirst(choices.competition.options, athleteById.get(row.athlete)?.category) : choices[column.key].options}
                                 allowOther={choices[column.key].allowOther}
                                 onChange={(value) => setCell(rowIndex, column, value)}
                                 label={`${column.label}, linha ${rowIndex + 1}`}
-                                className={`${inputClass} ${column.width} border-white/10 font-bold focus:border-primary`}
+                                className={`${inputClass} ${column.width}`}
                               />
                             ) : (
                               <input
@@ -448,7 +516,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                                 onChange={(event) => setCell(rowIndex, column, event.target.value)}
                                 aria-label={`${column.label}, linha ${rowIndex + 1}`}
                                 title={column.label}
-                                className={`${inputClass} ${column.width} border-white/10 focus:border-primary ${column.kind === 'number' ? 'font-black' : 'font-bold'}`}
+                                className={`${inputClass} ${column.width} border-white/10 hover:border-white/25 ${column.kind === 'number' ? 'font-black' : 'font-bold'}`}
                               />
                             )}
                           </td>

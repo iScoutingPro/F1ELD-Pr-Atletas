@@ -54,6 +54,8 @@ export interface Game {
   venue?: string;
   category?: string;
   competition?: string;
+  // Texto livre: número da rodada ou a fase (ex.: "3", "Semi-Final")
+  round?: string;
   athleteIds: string[];
   // Minutos jogados por atleta neste jogo (id do atleta -> minutos); quem não tem minutos lançados fica de fora
   athleteMinutes: Record<string, number>;
@@ -61,10 +63,12 @@ export interface Game {
   athleteScouts?: Record<string, Record<string, number>>;
 }
 
-// Um lançamento de scout: um atleta numa partida. Não depende dos jogos do Calendário
+// Um lançamento de scout: um atleta numa partida. Pode nascer de um jogo do Calendário (gameId), mas guarda os próprios dados
 export interface ScoutEntry {
   id: string;
   athleteId: string;
+  // Jogo do Calendário de onde a linha veio; vazio quando foi lançada à mão. Serve só para o jogo não voltar como pendente
+  gameId?: string;
   year: string;
   analyst: string;
   team: string;

@@ -20,6 +20,9 @@ alter table public.games add column if not exists athlete_minutes jsonb not null
 -- Scout por atleta no jogo, no formato {"id do atleta": {"goals": 1, "assists": 2}}; lançado na aba "Scout" e exibido no ícone Scout do perfil
 alter table public.games add column if not exists athlete_scouts jsonb not null default '{}'::jsonb;
 
+-- Rodada ou fase do jogo (texto livre, ex.: "3", "Semi-Final"); vai preenchida para a planilha do scout
+alter table public.games add column if not exists round text;
+
 alter table public.games enable row level security;
 
 -- Libera a tabela para a API (tabela nova não vem liberada); quem decide o que cada um pode fazer são as regras abaixo
