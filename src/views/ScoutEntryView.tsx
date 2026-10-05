@@ -1,206 +1,513 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ClipboardList, Save } from 'lucide-react';
-import { Athlete, Game } from '../types';
-import { SCOUT_FIELDS } from '../scout';
+import { createPortal } from 'react-dom';
+import { ClipboardList, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Athlete, Game, ScoutEntry, ScoutEntryInput } from '../types';
+import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, formatScoutValue, sortScoutEntries } from '../scout';
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
 
-type Draft = Record<string, Record<string, string>>;
+// Linha da planilha: chave da coluna -> texto digitado (na coluna Atleta, o id do atleta escolhido)
+type Row = Record<string, string>;
 
-interface ScoutEntryViewProps {
-  games: Game[];
-  athletes: Athlete[];
-  onSaveScouts: (gameId: string, scouts: Record<string, Record<string, number>>) => Promise<boolean>;
+interface Column {
+  key: string;
+  label: string;
+  // calc: total ou percentual calculado pelo app, não digitado
+  kind: 'text' | 'athlete' | 'number' | 'calc';
+  width: string;
+  field?: ScoutField;
 }
 
-const todayKey = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+const INFO_WIDTHS: Record<string, string> = {
+  year: 'min-w-[4.5rem]',
+  analyst: 'min-w-[8rem]',
+  team: 'min-w-[11rem]',
+  matchDate: 'min-w-[9rem]',
+  competition: 'min-w-[12rem]',
+  round: 'min-w-[5.5rem]',
+  match: 'min-w-[18rem]',
 };
 
-const formatDate = (date: string) => date.split('-').reverse().join('/');
+const infoColumn = ({ key, label }: { key: string; label: string }): Column => ({ key, label, kind: 'text', width: INFO_WIDTHS[key] });
+
+// Mesma ordem de colunas da planilha do usuário
+const COLUMNS: Column[] = [
+  ...SCOUT_INFO_FIELDS.slice(0, 2).map(infoColumn),
+  { key: 'athlete', label: 'Atleta', kind: 'athlete', width: 'min-w-[12rem]' },
+  ...SCOUT_INFO_FIELDS.slice(2).map(infoColumn),
+  ...SCOUT_FIELDS.map((field): Column => ({ key: field.key, label: field.label, kind: field.calc ? 'calc' : 'number', width: 'min-w-[4rem]', field })),
+];
+
+// A planilha de lançamento não tem os totais e percentuais: eles são calculados e aparecem só na tabela e no perfil
+const SHEET_COLUMNS = COLUMNS.filter((column) => column.kind !== 'calc');
+
+const BLANK_ROWS = 8;
+
+interface ScoutEntryViewProps {
+  entries: ScoutEntry[];
+  athletes: Athlete[];
+  // Só para sugerir as competições já cadastradas no Calendário
+  games: Game[];
+  onSave: (rows: ScoutEntryInput[], editingId?: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
+}
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 3);
 
-// Lançamento do scout em formato de planilha (só admin): um jogo por vez, uma linha por atleta vinculado
-export const ScoutEntryView = ({ games, athletes, onSaveScouts }: ScoutEntryViewProps) => {
-  // Jogos do mais recente para o mais antigo
-  const sortedGames = useMemo(
-    () => [...games].sort((a, b) => `${b.date} ${b.time || ''}`.localeCompare(`${a.date} ${a.time || ''}`)),
-    [games],
+const cleanValue = (column: Column, value: string) => (column.kind === 'number' ? onlyDigits(value) : value);
+
+const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
+
+// Compara nomes sem acento, sem diferença de maiúsculas e sem espaços sobrando
+const normalize = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+
+// Números digitados na linha, para gravar e para as colunas calculadas
+const rowStats = (row: Row): Record<string, number> =>
+  Object.fromEntries(SCOUT_FIELDS.filter(({ key, calc }) => !calc && (row[key] || '') !== '').map(({ key }) => [key, Number(row[key])]));
+
+const isTextColumn = (column: Column) => column.kind === 'text' || column.kind === 'athlete';
+
+// Valores sem repetição, em ordem alfabética
+const uniqueSorted = (values: (string | undefined)[]) =>
+  [...new Set<string>(values.map((value) => (value || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+const NO_CLUB = 'Sem Clube';
+const OTHER = '__outra__';
+
+interface ChoiceCellProps {
+  value: string;
+  options: string[];
+  // Com "Outra…" a célula vira campo de texto para digitar um valor que ainda não está na lista
+  allowOther?: boolean;
+  onChange: (value: string) => void;
+  label: string;
+  className: string;
+}
+
+// Célula de lista suspensa da planilha (Ano, Equipe do Atleta e Competição)
+const ChoiceCell = ({ value, options, allowOther, onChange, label, className }: ChoiceCellProps) => {
+  const [typing, setTyping] = useState(false);
+
+  if (typing) {
+    return (
+      <input
+        type="text"
+        autoFocus
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={() => setTyping(false)}
+        onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+        aria-label={label}
+        title={label}
+        placeholder="Digite"
+        className={className}
+      />
+    );
+  }
+
+  // Valor já gravado que não está na lista continua aparecendo
+  const list = value && !options.includes(value) ? [value, ...options] : options;
+  return (
+    <select
+      value={value}
+      onChange={(event) => {
+        if (event.target.value === OTHER) {
+          onChange('');
+          setTyping(true);
+        } else {
+          onChange(event.target.value);
+        }
+      }}
+      aria-label={label}
+      title={label}
+      className={className}
+    >
+      <option value="">Selecione</option>
+      {list.map((option) => <option key={option} value={option}>{option}</option>)}
+      {allowOther && <option value={OTHER}>Outra…</option>}
+    </select>
   );
+};
 
-  // Abre no jogo mais recente já realizado
-  const [gameId, setGameId] = useState(() => {
-    const today = todayKey();
-    return (sortedGames.find((game) => game.date <= today) || sortedGames[0])?.id || '';
-  });
-  const [draft, setDraft] = useState<Draft>({});
+const isEmptyRow = (row: Row) => SHEET_COLUMNS.every(({ key }) => (row[key] || '').trim() === '');
+
+// Lançamento do scout (só admin): o botão abre uma planilha, uma linha por atleta em cada partida,
+// e a tela lista embaixo tudo o que já foi lançado. Não depende dos jogos do Calendário.
+// O lançamento é só no computador: no celular (abaixo de sm) o botão, o lápis e a lixeira somem e fica só a tabela
+export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: ScoutEntryViewProps) => {
+  const [rows, setRows] = useState<Row[]>([]);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editing, setEditing] = useState<ScoutEntry | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [sheetError, setSheetError] = useState('');
+  const [search, setSearch] = useState('');
+  const [confirmingDelete, setConfirmingDelete] = useState('');
 
-  const game = sortedGames.find((item) => item.id === gameId) || sortedGames[0];
-  const rows = game ? game.athleteIds.map((id) => athletes.find((athlete) => athlete.id === id)).filter((athlete): athlete is Athlete => Boolean(athlete)) : [];
-
-  // Ao trocar de jogo, a grade carrega o scout já gravado dele
-  useEffect(() => {
-    const next: Draft = {};
-    Object.entries(game?.athleteScouts || {}).forEach(([athleteId, scout]) => {
-      next[athleteId] = Object.fromEntries(Object.entries(scout).map(([key, value]) => [key, String(value)]));
+  const athleteById = useMemo(() => new Map(athletes.map((athlete) => [athlete.id, athlete])), [athletes]);
+  // Opções da coluna Atleta: todos os cadastrados, em ordem alfabética. Quem está nas duas listas tem dois cadastros
+  // com o mesmo nome e aparece uma vez só (vale o de Agenciados); na edição, o cadastro já gravado entra como está
+  const athleteOptions = useMemo(() => {
+    const byName = new Map<string, Athlete>();
+    const original = editing ? athleteById.get(editing.athleteId) : undefined;
+    [...(original ? [original] : []), ...athletes.filter((a) => a.listType !== 'negociados'), ...athletes].forEach((athlete) => {
+      const name = normalize(fullName(athlete));
+      if (!byName.has(name)) byName.set(name, athlete);
     });
-    setDraft(next);
-    setSaved(false);
-  }, [game?.id]);
+    return [...byName.values()].sort((a, b) => fullName(a).localeCompare(fullName(b)));
+  }, [athletes, athleteById, editing]);
 
-  const setCell = (athleteId: string, key: string, value: string) => {
-    setSaved(false);
-    setDraft((prev) => ({ ...prev, [athleteId]: { ...prev[athleteId], [key]: onlyDigits(value) } }));
+  // Listas suspensas da planilha: o que já existe no app mais o que foi digitado nas outras linhas
+  const choices = useMemo<Record<string, { options: string[]; allowOther?: boolean }>>(() => {
+    const thisYear = new Date().getFullYear();
+    const years = Array.from({ length: 7 }, (_, index) => String(thisYear + 1 - index));
+    return {
+      year: { options: [...new Set<string>([...years, ...entries.map((entry) => entry.year).filter(Boolean)])].sort((a, b) => b.localeCompare(a)) },
+      team: {
+        options: uniqueSorted([...athletes.map((athlete) => athlete.club).filter((club) => club !== NO_CLUB), ...entries.map((entry) => entry.team), ...rows.map((row) => row.team)]),
+        allowOther: true,
+      },
+      competition: {
+        options: uniqueSorted([...games.map((game) => game.competition), ...entries.map((entry) => entry.competition), ...rows.map((row) => row.competition)]),
+        allowOther: true,
+      },
+    };
+  }, [athletes, entries, games, rows]);
+
+  // Ao escolher o atleta, a linha já vem com o ano atual, o clube do cadastro e a competição do último scout dele
+  const pickAthlete = (rowIndex: number, athleteId: string) => {
+    const athlete = athleteById.get(athleteId);
+    const last = sortScoutEntries(entries).find((entry) => entry.athleteId === athleteId);
+    setSheetError('');
+    setRows((prev) => prev.map((row, index) => (index !== rowIndex ? row : {
+      ...row,
+      athlete: athleteId,
+      year: row.year || (athlete ? String(new Date().getFullYear()) : ''),
+      team: athlete && athlete.club && athlete.club !== NO_CLUB ? athlete.club : (row.team || ''),
+      competition: last?.competition || row.competition || '',
+    })));
   };
 
-  // Colar um bloco copiado da planilha preenche a grade a partir da célula clicada (para a direita e para baixo)
-  const handlePaste = (event: React.ClipboardEvent<HTMLInputElement>, rowIndex: number, colIndex: number) => {
-    const lines = event.clipboardData.getData('text').replace(/\r/g, '').replace(/\n+$/, '').split('\n').map((line) => line.split('\t'));
-    if (lines.length === 1 && lines[0].length === 1) return;
-    event.preventDefault();
-    setSaved(false);
-    setDraft((prev) => {
-      const next = { ...prev };
-      lines.forEach((cells, lineIndex) => {
-        const athlete = rows[rowIndex + lineIndex];
-        if (!athlete) return;
-        const row = { ...next[athlete.id] };
-        cells.forEach((cell, cellIndex) => {
-          const field = SCOUT_FIELDS[colIndex + cellIndex];
-          if (field) row[field.key] = onlyDigits(cell);
-        });
-        next[athlete.id] = row;
-      });
-      return next;
-    });
+  const openSheet = (entry?: ScoutEntry) => {
+    setEditing(entry || null);
+    setSheetError('');
+    if (entry) {
+      const row: Row = { athlete: athleteById.has(entry.athleteId) ? entry.athleteId : '' };
+      SCOUT_INFO_FIELDS.forEach(({ key }) => { row[key] = entry[key]; });
+      Object.entries(entry.stats).forEach(([key, value]) => { row[key] = String(value); });
+      setRows([row]);
+    } else {
+      setRows(Array.from({ length: BLANK_ROWS }, () => ({})));
+    }
+    setSheetOpen(true);
+  };
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSheetOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [sheetOpen]);
+
+  const setCell = (rowIndex: number, column: Column, value: string) => {
+    setSheetError('');
+    setRows((prev) => prev.map((row, index) => (index === rowIndex ? { ...row, [column.key]: cleanValue(column, value) } : row)));
   };
 
   const handleSave = async () => {
-    if (!game || saving) return;
-    // Só vai para o banco o que foi preenchido, e só de quem continua vinculado ao jogo
-    const scouts: Record<string, Record<string, number>> = {};
-    rows.forEach((athlete) => {
-      const filled = SCOUT_FIELDS.filter(({ key }) => (draft[athlete.id]?.[key] || '') !== '').map(({ key }) => [key, Number(draft[athlete.id][key])] as [string, number]);
-      if (filled.length > 0) scouts[athlete.id] = Object.fromEntries(filled);
-    });
+    if (saving) return;
+    const filled = rows.filter((row) => !isEmptyRow(row));
+    if (filled.length === 0) {
+      setSheetError('Preencha pelo menos uma linha.');
+      return;
+    }
+
+    if (filled.some((row) => !athleteById.has(row.athlete || ''))) {
+      setSheetError('Escolha o atleta em todas as linhas preenchidas.');
+      return;
+    }
+
+    const info = (row: Row, key: string) => (row[key] || '').trim();
+    const inputs: ScoutEntryInput[] = filled.map((row) => ({
+      athleteId: row.athlete,
+      year: info(row, 'year'),
+      analyst: info(row, 'analyst'),
+      team: info(row, 'team'),
+      matchDate: info(row, 'matchDate'),
+      competition: info(row, 'competition'),
+      round: info(row, 'round'),
+      match: info(row, 'match'),
+      // Só vão para o banco os números preenchidos; totais e percentuais são calculados na hora de exibir
+      stats: rowStats(row),
+    }));
+
     setSaving(true);
-    const ok = await onSaveScouts(game.id, scouts);
+    const ok = await onSave(inputs, editing?.id);
     setSaving(false);
-    setSaved(ok);
+    if (ok) setSheetOpen(false);
   };
+
+  // Exclusão com confirmação em dois cliques
+  const handleDelete = async (id: string) => {
+    if (confirmingDelete !== id) {
+      setConfirmingDelete(id);
+      return;
+    }
+    setConfirmingDelete('');
+    await onDelete(id);
+  };
+
+  const sorted = useMemo(() => sortScoutEntries(entries), [entries]);
+  const term = normalize(search);
+  const visible = term
+    ? sorted.filter((entry) => {
+        const athlete = athleteById.get(entry.athleteId);
+        return normalize(`${athlete ? fullName(athlete) : ''} ${entry.team} ${entry.competition} ${entry.match}`).includes(term);
+      })
+    : sorted;
+
+  const headClass = 'whitespace-nowrap px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em]';
+  const cellClass = 'whitespace-nowrap border-t border-white/5 px-3 py-2.5 text-xs text-white/80';
+  // O nome do atleta fica parado à esquerda ao rolar a tabela para o lado
+  const stickyClass = 'sticky left-0 z-10 bg-surface-low';
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-6">
-      <section className={`${panelClass} p-6`}>
-        <div className="flex flex-wrap items-center gap-3">
-          <ClipboardList className="h-5 w-5 text-primary" />
-          <h2 className="text-2xl font-black uppercase italic tracking-tight text-white">Scout</h2>
-          <span className="rounded-full border border-white/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Só administradores</span>
+      <section className={`${panelClass} flex flex-wrap items-center justify-between gap-4 p-6`}>
+        <div>
+          <div className="flex flex-wrap items-center gap-3">
+            <ClipboardList className="h-5 w-5 text-primary" />
+            <h2 className="text-2xl font-black uppercase italic tracking-tight text-white">Scout</h2>
+            <span className="rounded-full border border-white/10 px-2.5 py-1 text-[8px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Só administradores</span>
+          </div>
+          <p className="mt-2 text-sm text-white/70 max-sm:hidden">Clique em "Adicionar scout" para abrir a planilha. Cada linha é um atleta numa partida.</p>
+          <p className="mt-2 text-sm text-white/70 sm:hidden">Números lançados. Para adicionar ou alterar, use o computador.</p>
         </div>
-        <p className="mt-2 text-sm text-white/70">
-          Escolha o jogo e preencha os números de cada atleta. Dá para colar um bloco copiado da planilha: clique na primeira célula e cole.
-        </p>
-
-        {sortedGames.length > 0 && (
-          <label className="mt-5 block">
-            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Jogo</span>
-            <select
-              value={game?.id || ''}
-              onChange={(event) => setGameId(event.target.value)}
-              className="mt-2 w-full rounded-2xl border border-white/10 bg-surface-high px-4 py-3 text-sm font-bold text-white outline-none transition focus:border-primary"
-            >
-              {sortedGames.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {formatDate(item.date)} · {item.home} x {item.away}{item.competition ? ` · ${item.competition}` : ''}{item.category ? ` · ${item.category}` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
+        <button
+          type="button"
+          onClick={() => openSheet()}
+          className="hidden items-center gap-2 rounded-full bg-primary px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.02] sm:inline-flex"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Adicionar scout
+        </button>
       </section>
 
-      {!game ? (
-        <div className={`${panelClass} p-8 text-center`}>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Sem jogos</p>
-          <p className="mt-2 text-sm text-white/70">Cadastre um jogo na aba Calendário para lançar o scout.</p>
+      <section className={`${panelClass} p-4`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+            Lançamentos <span className="ml-1 text-white">{term ? `${visible.length} de ${sorted.length}` : sorted.length}</span>
+          </p>
+          {sorted.length > 0 && (
+            <label className="relative block w-full sm:w-72">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+              <input
+                type="text"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Pesquisar atleta, equipe ou partida"
+                className="w-full rounded-full border border-white/10 bg-surface-high py-2 pl-9 pr-4 text-xs font-bold text-white outline-none transition placeholder:text-on-surface-variant focus:border-primary"
+              />
+            </label>
+          )}
         </div>
-      ) : rows.length === 0 ? (
-        <div className={`${panelClass} p-8 text-center`}>
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Sem atletas</p>
-          <p className="mt-2 text-sm text-white/70">Este jogo não tem atletas vinculados. Vincule os atletas na aba Calendário.</p>
-        </div>
-      ) : (
-        <section className={`${panelClass} p-4`}>
-          <div className="overflow-x-auto">
+
+        {visible.length === 0 ? (
+          <div className="p-8 text-center">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{sorted.length === 0 ? 'Sem lançamentos' : 'Nada encontrado'}</p>
+            <p className="mt-2 text-sm text-white/70">
+              {sorted.length === 0 ? 'Nenhum scout lançado ainda. O que for adicionado aparece aqui.' : 'Nenhum lançamento corresponde à pesquisa.'}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
             <table className="w-full border-separate border-spacing-0 text-center">
               <thead>
                 <tr>
-                  <th className="sticky left-0 z-10 bg-surface-low px-3 py-2 text-left text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Atleta</th>
-                  {SCOUT_FIELDS.map(({ key, short, label }) => (
-                    <th key={key} title={label} className="px-1 py-2 text-[9px] font-black uppercase tracking-[0.14em] text-primary">{short}</th>
+                  {COLUMNS.map((column) => (
+                    <th key={column.key} className={`${headClass} ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'} ${column.kind === 'athlete' ? stickyClass : ''}`}>{column.label}</th>
                   ))}
+                  <th className={`${headClass} max-sm:hidden`} />
                 </tr>
               </thead>
               <tbody>
-                {rows.map((athlete, rowIndex) => (
-                  <tr key={athlete.id}>
-                    <td className="sticky left-0 z-10 border-t border-white/5 bg-surface-low px-3 py-2 text-left">
-                      <div className="flex items-center gap-3">
-                        <img src={athlete.image} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover" referrerPolicy="no-referrer" />
-                        <div className="min-w-0">
-                          <p className="whitespace-nowrap text-xs font-black uppercase italic text-white">{athlete.name} {athlete.lastName}</p>
-                          <p className="whitespace-nowrap text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{athlete.position} · {athlete.category}</p>
+                {visible.map((entry) => {
+                  const athlete = athleteById.get(entry.athleteId);
+                  return (
+                    <tr key={entry.id} className="transition hover:bg-white/[0.03]">
+                      {COLUMNS.map(({ key, kind, field }) => (
+                        <td key={key} className={`${cellClass} ${kind === 'athlete' ? `${stickyClass} font-black uppercase italic text-white` : ''} ${field ? 'font-black text-white' : ''}`}>
+                          {kind === 'athlete'
+                            ? (athlete ? fullName(athlete) : 'Atleta apagado')
+                            : field
+                              ? formatScoutValue(field, entry.stats)
+                              : entry[key as keyof ScoutEntry] as string}
+                        </td>
+                      ))}
+                      <td className={`${cellClass} max-sm:hidden`}>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openSheet(entry)}
+                            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:bg-white/10 hover:text-white"
+                            aria-label="Editar lançamento"
+                            title="Editar"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(entry.id)}
+                            onBlur={() => setConfirmingDelete('')}
+                            className={`flex h-8 items-center justify-center gap-1.5 rounded-full border text-[9px] font-black uppercase tracking-[0.14em] transition ${confirmingDelete === entry.id ? 'border-error/40 bg-error/15 px-3 text-error hover:bg-error hover:text-white' : 'w-8 border-white/10 text-on-surface-variant hover:bg-white/10 hover:text-white'}`}
+                            aria-label="Excluir lançamento"
+                            title="Excluir"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {confirmingDelete === entry.id && 'Confirmar'}
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    {SCOUT_FIELDS.map(({ key, label }, colIndex) => (
-                      <td key={key} className="border-t border-white/5 px-1 py-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={draft[athlete.id]?.[key] || ''}
-                          onChange={(event) => setCell(athlete.id, key, event.target.value)}
-                          onPaste={(event) => handlePaste(event, rowIndex, colIndex)}
-                          onFocus={(event) => event.target.select()}
-                          aria-label={`${label} de ${athlete.name} ${athlete.lastName}`}
-                          title={label}
-                          className="h-9 w-12 rounded-lg border border-white/10 bg-surface-high text-center text-sm font-black text-white outline-none transition focus:border-primary focus:bg-white/10"
-                        />
                       </td>
-                    ))}
-                  </tr>
-                ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
+        )}
+      </section>
 
-          <p className="mt-4 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
-            {SCOUT_FIELDS.map(({ key, short, label }) => (
-              <span key={key}><span className="text-primary">{short}</span> {label}</span>
-            ))}
-          </p>
-
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-4">
-            {saved && (
-              <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-primary">
-                <Check className="h-3.5 w-3.5" /> Scout salvo
-              </span>
-            )}
+      {sheetOpen && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-2 py-4 backdrop-blur-sm sm:px-4 sm:py-8" onClick={() => setSheetOpen(false)}>
+          <div className="relative w-full max-w-[1800px] overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] p-4 shadow-[0_30px_80px_rgba(0,0,0,0.8)] sm:p-6" onClick={(event) => event.stopPropagation()}>
             <button
               type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.02] disabled:opacity-50"
+              onClick={() => setSheetOpen(false)}
+              className="absolute right-3 top-3 z-30 flex h-9 w-9 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-error hover:text-white active:bg-error active:text-white"
+              aria-label="Fechar"
+              title="Fechar"
             >
-              <Save className="h-3.5 w-3.5" />
-              {saving ? 'Salvando...' : 'Salvar scout'}
+              <X className="h-4 w-4" />
             </button>
+            <div className="pr-12">
+              <h3 className="text-xl font-black uppercase italic tracking-tight text-white">{editing ? 'Editar scout' : 'Adicionar scout'}</h3>
+              <p className="mt-2 text-sm text-white/70">
+                {editing
+                  ? 'Altere as informações do lançamento e salve.'
+                  : 'Preencha uma linha por atleta em cada partida. Ao escolher o atleta, o ano, a equipe e a competição já vêm preenchidos; confira e troque se for outro. Totais e percentuais não são preenchidos: o app calcula e mostra na tabela.'}
+              </p>
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full border-separate border-spacing-0 text-center">
+                <thead>
+                  <tr>
+                    {SHEET_COLUMNS.map((column) => (
+                      <th key={column.key} className={`whitespace-nowrap px-1 py-2 text-[9px] font-black uppercase tracking-[0.14em] ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'}`}>{column.label}</th>
+                    ))}
+                    {!editing && <th />}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, rowIndex) => {
+                    // Linha com algo preenchido e sem atleta escolhido fica marcada
+                    const athleteMissing = !isEmptyRow(row) && !row.athlete;
+                    const inputClass = 'h-9 w-full rounded-lg border bg-surface-high px-2 text-center text-sm text-white outline-none transition focus:bg-white/10';
+                    return (
+                      <tr key={rowIndex}>
+                        {SHEET_COLUMNS.map((column) => (
+                          <td key={column.key} className="px-0.5 py-1">
+                            {column.kind === 'athlete' ? (
+                              <select
+                                value={row.athlete || ''}
+                                onChange={(event) => pickAthlete(rowIndex, event.target.value)}
+                                aria-label={`Atleta, linha ${rowIndex + 1}`}
+                                title={athleteMissing ? 'Escolha o atleta' : column.label}
+                                className={`${inputClass} ${column.width} font-bold ${athleteMissing ? 'border-error/60 focus:border-error' : 'border-white/10 focus:border-primary'}`}
+                              >
+                                <option value="">Selecione</option>
+                                {athleteOptions.map((athlete) => (
+                                  <option key={athlete.id} value={athlete.id}>{fullName(athlete)}</option>
+                                ))}
+                              </select>
+                            ) : choices[column.key] ? (
+                              <ChoiceCell
+                                value={row[column.key] || ''}
+                                options={choices[column.key].options}
+                                allowOther={choices[column.key].allowOther}
+                                onChange={(value) => setCell(rowIndex, column, value)}
+                                label={`${column.label}, linha ${rowIndex + 1}`}
+                                className={`${inputClass} ${column.width} border-white/10 font-bold focus:border-primary`}
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                inputMode={column.kind === 'number' ? 'numeric' : undefined}
+                                value={row[column.key] || ''}
+                                onChange={(event) => setCell(rowIndex, column, event.target.value)}
+                                aria-label={`${column.label}, linha ${rowIndex + 1}`}
+                                title={column.label}
+                                className={`${inputClass} ${column.width} border-white/10 focus:border-primary ${column.kind === 'number' ? 'font-black' : 'font-bold'}`}
+                              />
+                            )}
+                          </td>
+                        ))}
+                        {!editing && (
+                          <td className="px-0.5 py-1">
+                            <button
+                              type="button"
+                              onClick={() => setRows((prev) => (prev.length > 1 ? prev.filter((_, index) => index !== rowIndex) : [{}]))}
+                              className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-white/10 hover:text-white"
+                              aria-label={`Remover linha ${rowIndex + 1}`}
+                              title="Remover linha"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {sheetError && <p className="mt-4 px-1 text-sm font-bold text-error">{sheetError}</p>}
+
+            <div className="mt-5 flex flex-wrap items-center gap-2 sm:gap-3">
+              {!editing && (
+                <button
+                  type="button"
+                  onClick={() => setRows((prev) => [...prev, {}])}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Adicionar linha
+                </button>
+              )}
+              <div className="flex flex-1 justify-end gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={() => setSheetOpen(false)}
+                  className="rounded-full border border-white/10 px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.02] disabled:opacity-50"
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {saving ? 'Salvando...' : 'Salvar scout'}
+                </button>
+              </div>
+            </div>
           </div>
-        </section>
+        </div>,
+        document.body,
       )}
     </div>
   );

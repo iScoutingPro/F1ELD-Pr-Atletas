@@ -1,7 +1,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck, Trash2 } from 'lucide-react';
-import { Athlete, Game, View } from '../types';
+import { Athlete, Game, ScoutEntry, View } from '../types';
+import { scoutMonthKey } from '../scout';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
 
@@ -10,6 +11,7 @@ const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub
 interface DashboardViewProps {
   athletes: Athlete[];
   games?: Game[];
+  scoutEntries?: ScoutEntry[];
   onAthletesClick?: () => void;
   onNavigate?: (view: View) => void;
   onOpenAthleteProfile?: (athlete: Athlete) => void;
@@ -74,14 +76,14 @@ const describeActivity = (activity: any) => {
   }
 };
 
-export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
+export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
   // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
   const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
   const agenciadosCount = totalAthletes - negociadosCount;
   const totalPeopleCount = buildEntries(athletes).length;
 
-  // Minutagem real: soma dos minutos lançados em cada jogo do calendário (Game.athleteMinutes).
+  // Minutagem real: soma da coluna Minutagem dos lançamentos de scout (aba "Scout").
   // Minutos de atleta já apagado ficam de fora. O gráfico cobre os últimos 6 meses, separado por lista.
   const today = new Date();
   const chartData = Array.from({ length: 6 }, (_, i) => {
@@ -95,16 +97,16 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
   });
   const athletesById = new Map(athletes.map(athlete => [athlete.id, athlete]));
   const minutesByAthlete = new Map<string, number>();
-  games.forEach(game => {
-    const month = chartData.find(item => item.key === game.date.slice(0, 7));
-    Object.entries(game.athleteMinutes || {}).forEach(([athleteId, minutes]) => {
-      const athlete = athletesById.get(athleteId);
-      if (!athlete || !(minutes > 0)) return;
-      minutesByAthlete.set(athleteId, (minutesByAthlete.get(athleteId) || 0) + minutes);
-      if (!month) return;
-      if (athlete.listType === 'negociados') month.cosmopolitano += minutes;
-      else month.field += minutes;
-    });
+  scoutEntries.forEach(entry => {
+    const athlete = athletesById.get(entry.athleteId);
+    const minutes = entry.stats.minutes;
+    if (!athlete || !(minutes > 0)) return;
+    minutesByAthlete.set(athlete.id, (minutesByAthlete.get(athlete.id) || 0) + minutes);
+    // Lançamento sem ano ou sem data reconhecível conta no Top 5, mas não entra no gráfico por mês
+    const month = chartData.find(item => item.key === scoutMonthKey(entry));
+    if (!month) return;
+    if (athlete.listType === 'negociados') month.cosmopolitano += minutes;
+    else month.field += minutes;
   });
   const chartTotal = chartData.reduce((acc, item) => acc + item.field + item.cosmopolitano, 0);
   const chartMax = Math.max(1, ...chartData.map(item => Math.max(item.field, item.cosmopolitano)));
@@ -196,7 +198,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
     count: people.filter(a => a.category === label).length,
   }));
 
-  // Top 5 pelo total de minutos lançados nos jogos; quem não tem minutos não entra
+  // Top 5 pelo total de minutos lançados no scout; quem não tem minutos não entra
   const featuredAthletes = athletes
     .map((athlete) => ({ ...athlete, minutes: minutesByAthlete.get(athlete.id) || 0 }))
     .filter((athlete) => athlete.minutes > 0)
@@ -294,7 +296,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
             <div className="space-y-3">
               {featuredAthletes.length === 0 && (
                 <p className="rounded-2xl border border-white/10 bg-surface-high p-4 text-center text-[11px] text-on-surface-variant">
-                  Nenhuma minutagem cadastrada ainda. Informe os minutos de cada atleta nos jogos do Calendário.
+                  Nenhuma minutagem cadastrada ainda. Lance a minutagem de cada atleta na aba Scout.
                 </p>
               )}
               {featuredAthletes.map((athlete, index) => (
@@ -465,7 +467,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
 
           {chartTotal === 0 ? (
             <p className="rounded-2xl border border-white/10 bg-surface-high p-6 text-center text-[11px] text-on-surface-variant">
-              Nenhuma minutagem cadastrada nos últimos 6 meses. Informe os minutos de cada atleta nos jogos do Calendário.
+              Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.
             </p>
           ) : (
             <div className="flex items-end gap-1.5 sm:gap-3 sm:px-2">

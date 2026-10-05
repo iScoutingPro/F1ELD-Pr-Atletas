@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { MOCK_ATHLETES } from './data';
-import { Athlete, Game, View } from './types';
+import { Athlete, Game, ScoutEntry, ScoutEntryInput, View } from './types';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
@@ -71,6 +71,47 @@ const mapGameRow = (g: any): Game => ({
   athleteScouts: g.athlete_scouts || {},
 });
 
+// Tabela scout_entries ausente ou sem grant (supabase/scout_entries.sql ainda não foi executado)
+const scoutErrorNotice = (title: string, error: { code?: string; message: string }): Notice => {
+  const missingGrant = /permission denied for table/i.test(error.message);
+  if (error.code === RLS_VIOLATION_CODE && !missingGrant) {
+    return notAllowedMessage('alterar', 'scout');
+  }
+  if (missingGrant || (error.code && MISSING_TABLE_CODES.includes(error.code))) {
+    return {
+      title: 'Scout não configurado',
+      message: 'O banco de dados ainda não está preparado para o scout. Execute o arquivo supabase/scout_entries.sql no SQL Editor do Supabase e tente de novo.',
+    };
+  }
+  return { title, message: error.message };
+};
+
+const mapScoutRow = (s: any): ScoutEntry => ({
+  id: s.id,
+  athleteId: s.athlete_id,
+  year: s.season || '',
+  analyst: s.analyst || '',
+  team: s.team || '',
+  matchDate: s.match_date || '',
+  competition: s.competition || '',
+  round: s.round || '',
+  match: s.match || '',
+  stats: s.stats || {},
+  createdAt: s.created_at || undefined,
+});
+
+const scoutPayload = (entry: ScoutEntryInput) => ({
+  athlete_id: entry.athleteId,
+  season: entry.year || null,
+  analyst: entry.analyst || null,
+  team: entry.team || null,
+  match_date: entry.matchDate || null,
+  competition: entry.competition || null,
+  round: entry.round || null,
+  match: entry.match || null,
+  stats: entry.stats,
+});
+
 // Traduz o erro do Supabase para um aviso legível na interface
 const errorNotice = (title: string, error: { code?: string; message: string }): Notice => {
   if (error.code === MISSING_COLUMN_CODE) {
@@ -130,6 +171,7 @@ export default function App() {
   const [session, setSession] = useState<any>(null);
   const [activities, setActivities] = useState<any[]>([]);
   const [games, setGames] = useState<Game[]>([]);
+  const [scoutEntries, setScoutEntries] = useState<ScoutEntry[]>([]);
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -155,6 +197,7 @@ export default function App() {
     setIsAddingAthlete(false);
     setActivities([]);
     setGames([]);
+    setScoutEntries([]);
     setView('login');
   };
 
@@ -436,8 +479,18 @@ export default function App() {
       }
     };
 
+    const fetchScoutEntries = async () => {
+      const { data, error } = await supabase.from('scout_entries').select('*');
+      if (error) {
+        console.error('Erro ao carregar scout:', error);
+      } else if (data) {
+        setScoutEntries(data.map(mapScoutRow));
+      }
+    };
+
     fetchAthletes();
     fetchGames();
+    fetchScoutEntries();
   }, [session]);
 
   const recordActivity = async (activity: any) => {
@@ -776,28 +829,26 @@ export default function App() {
     return true;
   };
 
-  // Grava o scout do jogo (aba "Scout"); substitui o scout inteiro daquele jogo
-  const handleSaveScouts = async (gameId: string, scouts: Record<string, Record<string, number>>): Promise<boolean> => {
+  // Grava lançamentos de scout (aba "Scout"): várias linhas novas de uma vez ou, com editingId, a alteração de uma só
+  const handleSaveScoutEntries = async (rows: ScoutEntryInput[], editingId?: string): Promise<boolean> => {
     if (!isAdmin) {
       setNotice(notAllowedMessage('lançar', 'scout'));
       return false;
     }
 
-    if (!hasSupabaseConfig || !supabase || gameId.startsWith('local-')) {
-      setGames(prev => prev.map(g => (g.id === gameId ? { ...g, athleteScouts: scouts } : g)));
+    if (!hasSupabaseConfig || !supabase || editingId?.startsWith('local-')) {
+      const saved: ScoutEntry[] = rows.map((row, index) => ({ ...row, id: editingId || `local-${Date.now()}-${index}` }));
+      setScoutEntries(prev => [...saved, ...prev.filter(e => e.id !== editingId)]);
       return true;
     }
 
-    const { data, error } = await supabase.from('games').update({ athlete_scouts: scouts }).eq('id', gameId).select();
+    const { data, error } = editingId
+      ? await supabase.from('scout_entries').update(scoutPayload(rows[0])).eq('id', editingId).select()
+      : await supabase.from('scout_entries').insert(rows.map(scoutPayload)).select();
 
     if (error) {
       console.error('Erro ao salvar scout:', error);
-      setNotice(error.code === MISSING_COLUMN_CODE
-        ? {
-            title: 'Scout não configurado',
-            message: 'O banco de dados ainda não está preparado para o scout. Execute o arquivo supabase/games.sql no SQL Editor do Supabase e tente de novo.',
-          }
-        : gameErrorNotice('Erro ao salvar scout', error));
+      setNotice(scoutErrorNotice('Erro ao salvar scout', error));
       return false;
     }
 
@@ -807,9 +858,43 @@ export default function App() {
       return false;
     }
 
-    const savedGame = mapGameRow(data[0]);
-    setGames(prev => prev.map(g => (g.id === savedGame.id ? savedGame : g)));
+    const saved = data.map(mapScoutRow);
+    setScoutEntries(prev => [...saved, ...prev.filter(e => e.id !== editingId)]);
     return true;
+  };
+
+  const handleDeleteScoutEntry = async (id: string): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('excluir', 'scout'));
+      return false;
+    }
+
+    if (hasSupabaseConfig && supabase && !id.startsWith('local-')) {
+      const { data, error } = await supabase.from('scout_entries').delete().eq('id', id).select();
+
+      if (error) {
+        console.error('Erro ao apagar scout:', error);
+        setNotice(scoutErrorNotice('Erro ao apagar scout', error));
+        return false;
+      }
+
+      // RLS bloqueia o delete sem retornar erro: nenhuma linha é apagada
+      if (!data || data.length === 0) {
+        setNotice(notAllowedMessage('excluir', 'scout'));
+        return false;
+      }
+    }
+
+    setScoutEntries(prev => prev.filter(e => e.id !== id));
+    return true;
+  };
+
+  // Scout do atleta no perfil. Quem está nas duas listas tem dois cadastros (mesmo nome completo e nascimento): valem os lançamentos dos dois
+  const scoutEntriesOf = (athlete: Athlete) => {
+    const samePerson = (a: Athlete) => a.id === athlete.id
+      || (Boolean(athlete.birthDate) && a.birthDate === athlete.birthDate && `${a.name} ${a.lastName}`.trim().toLowerCase() === `${athlete.name} ${athlete.lastName}`.trim().toLowerCase());
+    const ids = new Set(athletes.filter(samePerson).map(a => a.id));
+    return scoutEntries.filter(e => ids.has(e.athleteId));
   };
 
   const handleDeleteGame = async (id: string): Promise<boolean> => {
@@ -889,7 +974,7 @@ export default function App() {
       case 'login': return <LoginView onLogin={() => setView('dashboard')} onForgot={() => setView('recovery')} />;
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
-      case 'dashboard': return <DashboardView athletes={athletes} games={games} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
+      case 'dashboard': return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
       case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'negociados': return (
@@ -916,8 +1001,8 @@ export default function App() {
         />
       );
       // Só admin lança scout; os demais caem no painel (default)
-      case 'lancar-scout': if (isAdmin) return <ScoutEntryView games={games} athletes={athletes} onSaveScouts={handleSaveScouts} />;
-      default: return <DashboardView athletes={athletes} games={games} />;
+      case 'lancar-scout': if (isAdmin) return <ScoutEntryView entries={scoutEntries} athletes={athletes} games={games} onSave={handleSaveScoutEntries} onDelete={handleDeleteScoutEntry} />;
+      default: return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} />;
     }
   };
 
@@ -1027,7 +1112,7 @@ export default function App() {
               {profileDetailView === 'calendar' ? (
                 <AthleteGames athlete={selectedAthlete} games={games} />
               ) : profileDetailView === 'stats' ? (
-                <AthleteScout athlete={selectedAthlete} games={games} />
+                <AthleteScout entries={scoutEntriesOf(selectedAthlete)} />
               ) : (
                 <AthleteInfo athlete={selectedAthlete} />
               )}

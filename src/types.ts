@@ -57,9 +57,28 @@ export interface Game {
   athleteIds: string[];
   // Minutos jogados por atleta neste jogo (id do atleta -> minutos); quem não tem minutos lançados fica de fora
   athleteMinutes: Record<string, number>;
-  // Scout por atleta neste jogo (id do atleta -> número do scout -> valor); as chaves dos números estão em src/scout.ts
+  // Scout antigo, lançado por jogo; não é mais usado (o scout agora fica em ScoutEntry), só é mantido como está no banco
   athleteScouts?: Record<string, Record<string, number>>;
 }
+
+// Um lançamento de scout: um atleta numa partida. Não depende dos jogos do Calendário
+export interface ScoutEntry {
+  id: string;
+  athleteId: string;
+  year: string;
+  analyst: string;
+  team: string;
+  // Texto livre, como na planilha (ex.: "03.01 às 13h00")
+  matchDate: string;
+  competition: string;
+  round: string;
+  match: string;
+  // Número do scout -> valor; as chaves estão em SCOUT_FIELDS (src/scout.ts)
+  stats: Record<string, number>;
+  createdAt?: string;
+}
+
+export type ScoutEntryInput = Omit<ScoutEntry, 'id' | 'createdAt'>;
 
 export type View ='login' | 'dashboard' | 'calendar' | 'scout' | 'lancar-scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
