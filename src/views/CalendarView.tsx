@@ -19,7 +19,7 @@ const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 
 const labelClass = 'ml-1 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant';
-const inputClass = 'w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
+const inputClass = 'w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
 
 const formatDateKey = (date: Date) => {
   const year = date.getFullYear();
@@ -49,6 +49,9 @@ const TeamCrest = ({ name, logo }: { name: string; logo?: string }) => (
     )}
   </div>
 );
+
+// No iPhone o campo de data/hora tem largura própria e saía do cartão: no celular ele perde a aparência nativa para respeitar a largura
+const dateInputClass = `${inputClass} [color-scheme:dark] max-sm:min-h-[50px] max-sm:appearance-none`;
 
 interface GameFormProps {
   game?: Game;
@@ -118,33 +121,34 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-2 py-4 backdrop-blur-sm sm:px-4 sm:py-8">
       <div className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-surface-high text-base font-black text-white transition hover:border-primary/40 hover:bg-primary/10"
+          className="absolute right-3 top-3 z-30 flex h-9 w-9 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-error hover:text-white active:bg-error active:text-white"
           aria-label="Fechar"
+          title="Fechar"
         >
-          ×
+          <X className="h-4 w-4" />
         </button>
 
-        <form onSubmit={handleSubmit} className="relative space-y-5 px-6 pb-8 pt-10 sm:px-10">
+        <form onSubmit={handleSubmit} className="relative space-y-5 px-4 pb-6 pt-10 sm:px-10 sm:pb-8">
           <div>
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Calendário</p>
             <h2 className="mt-2 text-2xl font-black uppercase italic leading-none text-white">{game ? 'Editar jogo' : 'Adicionar jogo'}</h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Data *</label>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={dateInputClass} />
             </div>
             <div className="space-y-1">
               <label className={labelClass}>Horário</label>
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={`${inputClass} [color-scheme:dark]`} />
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={dateInputClass} />
             </div>
             <div className="space-y-1">
               <label className={labelClass}>Mandante *</label>
@@ -180,7 +184,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
             {selectedAthletes.length > 0 && (
               <div className="space-y-2">
                 {selectedAthletes.map((athlete) => (
-                  <div key={athlete.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-surface-high p-2">
+                  <div key={athlete.id} className="flex items-center gap-2 rounded-2xl border border-white/10 bg-surface-high p-2 sm:gap-3">
                     <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
                     <p className="min-w-0 flex-1 break-words text-[11px] font-black uppercase leading-tight tracking-[0.06em] text-white">{fullName(athlete)}</p>
                     <div className="flex shrink-0 items-center gap-2">
@@ -189,7 +193,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
                         inputMode="numeric"
                         value={minutes[athlete.id] || ''}
                         onChange={(e) => setMinutes((prev) => ({ ...prev, [athlete.id]: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
-                        className="w-16 rounded-xl border border-white/10 bg-background px-2 py-2 text-center text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15"
+                        className="w-12 sm:w-16 rounded-xl border border-white/10 bg-background px-2 py-2 text-center text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15"
                         placeholder="0"
                         aria-label={`Minutos jogados por ${fullName(athlete)}`}
                       />
@@ -251,30 +255,30 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 pt-2">
+          <div className="flex flex-wrap items-center gap-2 pt-2 sm:gap-3">
             {game && onDelete && (
               <button
                 type="button"
                 onClick={handleDelete}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-2xl border border-error/40 bg-error/15 px-5 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-error transition hover:bg-error hover:text-white disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-2xl border border-error/40 bg-error/15 px-4 py-4 sm:px-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-error transition hover:bg-error hover:text-white disabled:opacity-50"
               >
                 <Trash2 className="h-4 w-4" />
                 {confirmingDelete ? 'Confirmar exclusão' : 'Excluir'}
               </button>
             )}
-            <div className="flex flex-1 justify-end gap-3">
+            <div className="flex flex-1 justify-end gap-2 sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-2xl border border-white/10 bg-surface-high px-6 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:border-white/20"
+                className="rounded-2xl border border-white/10 bg-surface-high px-4 py-4 sm:px-6 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-white transition hover:border-white/20"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={saving}
-                className="rounded-2xl bg-primary px-8 py-4 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-xl transition hover:scale-[1.02] disabled:opacity-50"
+                className="whitespace-nowrap rounded-2xl bg-primary px-5 py-4 sm:px-8 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-background shadow-xl transition hover:scale-[1.02] disabled:opacity-50"
               >
                 {saving ? 'Salvando...' : 'Salvar jogo'}
               </button>

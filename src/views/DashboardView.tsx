@@ -365,23 +365,36 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
         </div>
 
         <aside hidden={!showNotifications} className="rounded-[1.75rem] border border-white/10 bg-surface-low p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Atualizações</p>
-              <h3 className="mt-2 text-xl sm:text-[1.5rem] font-black uppercase italic leading-none text-white">Notificações</h3>
+          {/* No celular o título e os botões encolhem para caber na mesma linha; se ainda assim não couber, os botões descem alinhados à direita */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3 sm:gap-x-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant max-sm:tracking-[0.2em]">Atualizações</p>
+              <h3 className="mt-2 text-base sm:text-[1.5rem] font-black uppercase italic leading-none text-white">Notificações</h3>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 min-w-[2.25rem] items-center justify-center rounded-full border border-primary/30 bg-primary/10 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
+            <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+              <div className="flex h-8 min-w-[2rem] items-center justify-center rounded-full border border-primary/30 bg-primary/10 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-primary sm:h-9 sm:min-w-[2.25rem]">
                 {unreadCount}
               </div>
               <button
                 type="button"
                 onClick={handleMarkAllAsRead}
-                className="flex h-10 w-10 items-center justify-center rounded-2xl bg-surface-high border border-white/10 hover:border-primary/30 transition"
+                className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-high border border-white/10 hover:border-primary/30 transition sm:h-10 sm:w-10 sm:rounded-2xl"
                 aria-label="Marcar notificações como lidas"
               >
                 <CheckCheck className="h-4 w-4 text-primary" />
               </button>
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleClearNotifications}
+                  className="flex h-8 w-8 items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-high text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary/30 sm:h-10 sm:w-auto sm:rounded-2xl sm:px-3"
+                  aria-label="Limpar notificações"
+                  title="Limpar notificações"
+                >
+                  <Trash2 className="h-4 w-4 text-primary" />
+                  <span className="max-sm:hidden">Limpar</span>
+                </button>
+              )}
             </div>
           </div>
 
@@ -390,16 +403,6 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
               <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
                 Nenhuma notificação ainda.
               </p>
-            )}
-            {notifications.length > 0 && (
-              <button
-                type="button"
-                onClick={handleClearNotifications}
-                className="order-last flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-surface-high px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary/40"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Limpar notificações
-              </button>
             )}
             {notifications.map((notification) => (
               <button

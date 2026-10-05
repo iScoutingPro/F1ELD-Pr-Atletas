@@ -112,7 +112,7 @@ const Detail = ({ icon: Icon, label, muted, className = '', children }: { icon: 
 const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
   <span
     title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
-    className="flex h-10 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-16 sm:w-24 sm:p-1.5"
+    className="flex h-10 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-[52px] sm:w-20 sm:p-1.5"
   >
     {list === 'negociados' ? (
       <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
@@ -146,7 +146,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
       transition={{ duration: 0.4, delay: Math.min(index, 10) * 0.04, ease: [0.22, 1, 0.36, 1] }}
       onClick={() => onSelect?.(athlete)}
       // No celular a foto fica ao lado do nome e a faixa de números e os detalhes ocupam a largura toda, embaixo
-      className={`${panelClass} group relative grid w-full grid-cols-[6rem_minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden text-left sm:grid-cols-[10rem_minmax(0,1fr)] transition duration-500 hover:-translate-y-1 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_40px_90px_-40px_rgba(255,255,255,0.22)]`}
+      className={`${panelClass} group relative grid w-full grid-cols-[6rem_minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden text-left sm:grid-cols-[9rem_minmax(0,1fr)] transition duration-500 hover:-translate-y-1 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_40px_90px_-40px_rgba(255,255,255,0.22)]`}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
       <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/[0.05] blur-3xl transition duration-500 group-hover:bg-white/[0.09]" />
@@ -175,7 +175,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         </div>
       </div>
 
-      <div className="relative min-w-0 p-3 sm:px-4 sm:pb-0 sm:pt-4">
+      <div className="relative min-w-0 p-3 sm:px-3.5 sm:pb-0 sm:pt-3">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
             {listLabel(entry)}
@@ -185,8 +185,8 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           </span>
         </div>
 
-        <div className="mt-2.5 flex items-center gap-3">
-          <h3 className="min-w-0 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white sm:text-2xl">
+        <div className="mt-2.5 flex items-center gap-3 sm:mt-2">
+          <h3 className="min-w-0 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white sm:text-[1.375rem]">
             <span className="block truncate">{athlete.name}</span>
             {athlete.lastName && (
               <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
@@ -196,14 +196,14 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
             {entry.lists.map(list => <ListLogo key={list} list={list} />)}
           </div>
         </div>
-        <p className="mt-1.5 truncate text-[11px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
+        <p className="mt-1.5 truncate text-[11px] sm:mt-1 font-black uppercase tracking-[0.22em] text-on-surface-variant">
           <span className="text-primary">{athlete.position || 'Sem posição'}</span>
           {athlete.secondaryPosition && <span> · {athlete.secondaryPosition}</span>}
         </p>
       </div>
 
-      <div className="relative col-span-2 min-w-0 px-3 pb-3 sm:col-span-1 sm:col-start-2 sm:px-4 sm:pb-4">
-        <div className="grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-2 sm:mt-3">
+      <div className="relative col-span-2 min-w-0 px-3 pb-3 sm:col-span-1 sm:col-start-2 sm:px-3.5">
+        <div className="grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-2 sm:mt-2 sm:py-1.5">
           {stats.map(({ label, value, unit }) => (
             <div key={label} className="min-w-0 px-2 text-center first:pl-0 last:pr-0">
               <p className="truncate text-lg font-black italic leading-none tracking-tight text-white">
@@ -215,7 +215,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           ))}
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 sm:mt-2 sm:gap-y-1.5">
           <Detail icon={Shield} label="Clube Atual">
             {athlete.clubLogo && <img src={athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
             <span className="truncate">{club}</span>

@@ -11,7 +11,9 @@ const FEET = ['Direito', 'Esquerdo', 'Ambidestro'];
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
 const labelClass = 'ml-1 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant';
-const inputClass = 'w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
+const inputClass = 'w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';
+// No iPhone o campo de data/hora tem largura própria e saía do cartão: no celular ele perde a aparência nativa para respeitar a largura
+const dateInputClass = `${inputClass} [color-scheme:dark] max-sm:min-h-[50px] max-sm:appearance-none`;
 const toggleClass = (active: boolean) =>
   `flex-1 rounded-xl border py-3.5 text-[10px] font-black uppercase tracking-[0.2em] transition ${active ? 'border-primary bg-primary text-background shadow-[0_8px_24px_rgba(255,255,255,0.12)]' : 'border-white/10 bg-surface-high text-on-surface-variant hover:border-white/30 hover:text-on-surface'}`;
 
@@ -20,10 +22,10 @@ const FormSection = ({ title, children }: { title: string; children: React.React
   <section className="space-y-3">
     <div className="flex items-center gap-3">
       <span className="h-4 w-0.5 rounded-full bg-primary" />
-      <h3 className="text-base font-black uppercase tracking-[0.12em] text-primary underline decoration-2 underline-offset-8">{title}</h3>
+      <h3 className="min-w-0 text-base font-black uppercase tracking-[0.12em] text-primary underline decoration-2 underline-offset-8">{title}</h3>
       <span className="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent" />
     </div>
-    <div className={`${panelClass} space-y-5 p-6`}>{children}</div>
+    <div className={`${panelClass} space-y-5 p-4 sm:p-6`}>{children}</div>
   </section>
 );
 
@@ -151,7 +153,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
   };
 
   return (
-    <div className="relative mx-auto max-w-4xl px-6 pb-10 pt-12 sm:px-10">
+    <div className="relative mx-auto max-w-4xl px-3 pb-6 pt-12 sm:px-10 sm:pb-10">
       <input type="file" ref={athleteFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setCropSource)} />
       {cropSource && (
         <ImageCropper
@@ -165,14 +167,14 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
       )}
       <input type="file" ref={clubFileRef} className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, setClubLogo)} />
 
-      <section className={`${panelClass} relative mb-10 overflow-hidden p-8`}>
+      <section className={`${panelClass} relative mb-8 overflow-hidden p-4 sm:mb-10 sm:p-8`}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-        <div className="relative flex flex-wrap items-center gap-6">
+        <div className="relative flex flex-wrap items-center gap-4 sm:gap-6">
           <button
             type="button"
             onClick={() => athleteFileRef.current?.click()}
-            className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-white/80 ring-offset-4 ring-offset-background transition hover:scale-[1.02]"
+            className="group relative h-20 w-20 sm:h-28 sm:w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-white/80 ring-offset-4 ring-offset-background transition hover:scale-[1.02]"
             aria-label="Trocar foto do atleta"
           >
             <img src={athleteImage} alt="Atleta" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
@@ -182,7 +184,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
           </button>
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">{athlete ? 'Editar perfil' : 'Cadastro de atleta'}</p>
-            <h2 className="mt-2 truncate text-3xl font-black uppercase italic leading-none text-white">
+            <h2 className="mt-2 truncate text-xl sm:text-3xl font-black uppercase italic leading-none text-white">
               {athlete ? `${athlete.name} ${athlete.lastName}` : 'Novo atleta'}
             </h2>
             <p className="mt-3 text-xs font-bold text-on-surface-variant">Toque na foto para escolher a imagem do atleta.</p>
@@ -206,10 +208,10 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
             <label className={labelClass}>Nome Completo *</label>
             <input type="text" ref={nameRef} defaultValue={athlete ? `${athlete.name} ${athlete.lastName}` : ''} className={inputClass} placeholder="Nome Completo" />
           </div>
-          <div className={`grid grid-cols-1 gap-4 ${hasDualNationality ? 'sm:grid-cols-[1fr_1fr_auto_1fr]' : 'sm:grid-cols-[1fr_1fr_auto]'}`}>
+          <div className={`grid grid-cols-1 gap-4 [&>*]:min-w-0 ${hasDualNationality ? 'sm:grid-cols-[1fr_1fr_auto_1fr]' : 'sm:grid-cols-[1fr_1fr_auto]'}`}>
             <div className="min-w-0 space-y-1">
               <label className={labelClass}>Data de Nascimento *</label>
-              <input type="date" ref={birthDateRef} defaultValue={athlete?.birthDate || ''} className={`${inputClass} [color-scheme:dark]`} />
+              <input type="date" ref={birthDateRef} defaultValue={athlete?.birthDate || ''} className={dateInputClass} />
             </div>
             <div className="min-w-0 space-y-1">
               <label className={labelClass}>Nacionalidade</label>
@@ -233,7 +235,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
             <label className={labelClass}>Cidade/Estado</label>
             <input type="text" ref={naturalidadeRef} defaultValue={athlete?.naturalidade || ''} className={inputClass} placeholder="Ex.: Campinas/SP" />
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Altura</label>
               <input type="text" inputMode="decimal" maxLength={4} ref={heightRef} defaultValue={athlete?.height ? (athlete.height / 100).toFixed(2).replace('.', ',') : ''} onInput={e => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1'); }} className={inputClass} placeholder="Ex.: 1,80" />
@@ -242,7 +244,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               <label className={labelClass}>Peso</label>
               <input type="text" inputMode="decimal" maxLength={5} ref={weightRef} defaultValue={athlete?.weight ?? ''} onInput={e => { e.currentTarget.value = e.currentTarget.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1'); }} className={inputClass} placeholder="Ex.: 72" />
             </div>
-            <div className="space-y-1">
+            <div className="col-span-2 space-y-1 sm:col-span-1">
               <label className={labelClass}>Pé Dominante</label>
               <select ref={preferredFootRef} defaultValue={athlete?.preferredFoot || ''} className={inputClass}>
                 <option value="">—</option>
@@ -255,16 +257,16 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
         <FormSection title="Informações esportivas">
           <div className="space-y-1">
             <label className={labelClass}>Clube Atual</label>
-            <div className="flex gap-4 items-center">
+            <div className="flex gap-3 sm:gap-4 items-center">
               <input type="text" ref={clubRef} defaultValue={athlete?.club === 'Sem Clube' ? '' : athlete?.club} className={`flex-1 ${inputClass}`} placeholder="Nome do Clube" />
-              <button type="button" className="relative group" onClick={() => clubFileRef.current?.click()} aria-label="Escudo do clube">
+              <button type="button" className="relative group shrink-0" onClick={() => clubFileRef.current?.click()} aria-label="Escudo do clube">
                 <div className="flex h-[50px] w-[50px] items-center justify-center overflow-hidden rounded-xl border border-white/10 bg-surface-high transition group-hover:border-white/40">
                   {clubLogo ? <img src={clubLogo} alt="Logo" className="w-full h-full object-contain" /> : <ShieldCheck className="h-5 w-5 text-primary" />}
                 </div>
               </button>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Categoria *</label>
               <select ref={categoryRef} defaultValue={athlete?.category || ''} className={inputClass}>
@@ -292,7 +294,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
         <FormSection title="Informações contratuais">
           <div className="space-y-2">
             <label className={labelClass}>Tipo de Contrato</label>
-            <div className="flex gap-4">
+            <div className="flex gap-2 sm:gap-4">
               {(['Profissional', 'Amador'] as const).map(level => (
                 <button key={level} type="button" onClick={() => setContractLevel(contractLevel === level ? '' : level)} className={toggleClass(contractLevel === level)}>
                   {level.toUpperCase()}
@@ -300,14 +302,14 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Início do Contrato</label>
-              <input type="date" ref={contractStartRef} defaultValue={athlete?.contractStart || ''} className={`${inputClass} [color-scheme:dark]`} />
+              <input type="date" ref={contractStartRef} defaultValue={athlete?.contractStart || ''} className={dateInputClass} />
             </div>
             <div className="space-y-1">
               <label className={labelClass}>Término do Contrato</label>
-              <input type="date" ref={contractEndRef} defaultValue={athlete?.contractEnd || ''} className={`${inputClass} [color-scheme:dark]`} />
+              <input type="date" ref={contractEndRef} defaultValue={athlete?.contractEnd || ''} className={dateInputClass} />
             </div>
           </div>
           <div className="space-y-1">
@@ -317,7 +319,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
         </FormSection>
 
         <FormSection title="Contatos">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>WhatsApp Atleta</label>
               <input type="tel" ref={whatsappAthleteRef} defaultValue={athlete?.whatsappAthlete || ''} className={inputClass} placeholder="(11) 99999-9999" />
@@ -332,7 +334,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
         <FormSection title="Outras informações">
           <div className="space-y-2">
             <label className={labelClass}>Possui DVD?</label>
-            <div className="flex gap-4">
+            <div className="flex gap-2 sm:gap-4">
               <button type="button" onClick={() => setHasDvd(true)} className={toggleClass(hasDvd)}>SIM</button>
               <button type="button" onClick={() => { setHasDvd(false); setDvdLink(''); }} className={toggleClass(!hasDvd)}>NÃO</button>
             </div>
@@ -358,8 +360,8 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
           )}
         </FormSection>
       </div>
-      <div className="mt-10 flex gap-4">
-        <button onClick={handleSubmit} className="flex-1 rounded-2xl bg-primary py-5 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-[0_12px_32px_rgba(255,255,255,0.12)] transition hover:scale-[1.01]">Salvar atleta</button>
+      <div className="mt-8 flex gap-2 sm:mt-10 sm:gap-4">
+        <button onClick={handleSubmit} className="flex-1 rounded-2xl bg-primary py-4 sm:py-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-background shadow-[0_12px_32px_rgba(255,255,255,0.12)] transition hover:scale-[1.01]">Salvar atleta</button>
         {athlete && onDelete ? (
           <button 
             type="button"
@@ -368,12 +370,12 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
                 onDelete(athlete.id);
               }
             }} 
-            className="rounded-2xl border border-error/20 bg-error/10 px-8 py-5 text-[11px] font-black uppercase tracking-[0.2em] text-error transition hover:bg-error/20"
+            className="rounded-2xl border border-error/20 bg-error/10 px-4 py-4 sm:px-8 sm:py-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-error transition hover:bg-error/20"
           >
             APAGAR ATLETA
           </button>
         ) : (
-          <button onClick={onBack} className="rounded-2xl border border-white/10 bg-surface-high px-8 py-5 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:border-white/20">Cancelar</button>
+          <button onClick={onBack} className="rounded-2xl border border-white/10 bg-surface-high px-4 py-4 sm:px-8 sm:py-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-white transition hover:border-white/20">Cancelar</button>
         )}
       </div>
     </div>

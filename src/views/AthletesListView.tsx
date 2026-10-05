@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Plus, Filter, MoreVertical, Disc } from 'lucide-react';
+import { Search, Plus, Filter, SlidersHorizontal, MoreVertical, Disc } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Athlete } from '../types';
 
@@ -11,16 +11,18 @@ interface AthletesListViewProps {
   onSelectAthlete: (athlete: Athlete) => void;
   onAddAthlete?: () => void;
   title?: string;
-  subtitle?: string;
 }
 
-export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, title = 'Atletas Agenciados', subtitle = 'com atletas captados' }: AthletesListViewProps) => {
+export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, title = 'Atletas Agenciados' }: AthletesListViewProps) => {
   const [nameSearch, setNameSearch] = useState('');
   const [categorySearch, setCategorySearch] = useState('');
   const [positionSearch, setPositionSearch] = useState('');
   const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   const [showPositionSuggestions, setShowPositionSuggestions] = useState(false);
+  // No celular, categoria e posição ficam recolhidas atrás do botão ao lado da busca, e os textos dos campos são mais curtos
+  const [showFilters, setShowFilters] = useState(false);
+  const [isMobile] = useState(() => window.matchMedia('(max-width: 639px)').matches);
 
   const filteredAthletes = athletes.filter(athlete => {
     const fullName = `${athlete.name} ${athlete.lastName}`.toLowerCase();
@@ -49,12 +51,10 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-8">
+    <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-5 sm:space-y-8">
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0 border-l-4 border-primary pl-4">
-          <h2 className="text-2xl sm:text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>
-          <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">{subtitle}</span>
-        </div>
+          <h2 className="text-2xl sm:text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>        </div>
         {onAddAthlete && (
           <button onClick={onAddAthlete} className="shrink-0 p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
             <Plus className="w-6 h-6" />
@@ -62,17 +62,18 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
         )}
       </div>
 
-      <div className="space-y-4">
-        <div className="relative group">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+      <div className="space-y-2 sm:space-y-4">
+        <div className="flex gap-2">
+        <div className="relative group min-w-0 flex-1">
+          <Search className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
           <input 
             type="text" 
-            placeholder="Pesquisar por Nome do Atleta..."
+            placeholder={isMobile ? 'Pesquisar atleta' : 'Pesquisar por Nome do Atleta...'}
             value={nameSearch}
             onChange={(e) => { setNameSearch(e.target.value); setShowNameSuggestions(true); }}
             onFocus={() => setShowNameSuggestions(true)}
             onBlur={() => setTimeout(() => setShowNameSuggestions(false), 200)}
-            className="w-full bg-surface-low border border-white/5 text-white pl-12 pr-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
+            className="w-full bg-surface-low border border-white/5 text-white pl-10 pr-3 py-3 rounded-xl sm:pl-12 sm:pr-4 sm:py-4 sm:rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
           />
           <AnimatePresence>
             {showNameSuggestions && nameSuggestions.length > 0 && (
@@ -95,18 +96,29 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
             )}
           </AnimatePresence>
         </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters(open => !open)}
+            aria-label="Filtros de categoria e posição"
+            aria-expanded={showFilters}
+            className={`relative flex w-11 shrink-0 items-center justify-center rounded-xl border transition sm:hidden ${showFilters ? 'border-primary bg-primary text-background' : 'border-white/5 bg-surface-low text-on-surface-variant'}`}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {!showFilters && (categorySearch || positionSearch) && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />}
+          </button>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={`${showFilters ? 'grid' : 'hidden'} grid-cols-2 gap-2 sm:grid sm:gap-4`}>
           <div className="relative group">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+            <Filter className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
             <input 
               type="text" 
-              placeholder="Filtrar por Categoria..."
+              placeholder={isMobile ? 'Categoria' : 'Filtrar por Categoria...'}
               value={categorySearch}
               onChange={(e) => { setCategorySearch(e.target.value); setShowCategorySuggestions(true); }}
               onFocus={() => setShowCategorySuggestions(true)}
               onBlur={() => setTimeout(() => setShowCategorySuggestions(false), 200)}
-              className="w-full bg-surface-low border border-white/5 text-white pl-12 pr-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
+              className="w-full bg-surface-low border border-white/5 text-white pl-10 pr-3 py-3 rounded-xl sm:pl-12 sm:pr-4 sm:py-4 sm:rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
             />
             <AnimatePresence>
               {showCategorySuggestions && categorySuggestions.length > 0 && (
@@ -119,15 +131,15 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
             </AnimatePresence>
           </div>
           <div className="relative group">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
+            <Search className="absolute left-3.5 sm:left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
             <input 
               type="text" 
-              placeholder="Filtrar por Posição..."
+              placeholder={isMobile ? 'Posição' : 'Filtrar por Posição...'}
               value={positionSearch}
               onChange={(e) => { setPositionSearch(e.target.value); setShowPositionSuggestions(true); }}
               onFocus={() => setShowPositionSuggestions(true)}
               onBlur={() => setTimeout(() => setShowPositionSuggestions(false), 200)}
-              className="w-full bg-surface-low border border-white/5 text-white pl-12 pr-4 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
+              className="w-full bg-surface-low border border-white/5 text-white pl-10 pr-3 py-3 rounded-xl sm:pl-12 sm:pr-4 sm:py-4 sm:rounded-2xl text-[10px] font-black uppercase tracking-widest outline-none"
             />
             <AnimatePresence>
               {showPositionSuggestions && positionSuggestions.length > 0 && (

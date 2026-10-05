@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
+import { FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Imports from Libs & Types
@@ -898,7 +898,6 @@ export default function App() {
           onSelectAthlete={openAthleteProfile}
           onAddAthlete={isAdmin ? openAddAthlete : undefined}
           title="Atletas Negociados"
-          subtitle="lista independente dos agenciados"
         />
       );
       case 'agenciados-negociados': return <AgenciadosNegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
@@ -1038,15 +1037,16 @@ export default function App() {
       ) : null}
 
       {isAdmin && ((selectedAthlete && isEditingAthlete) || isAddingAthlete) ? (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-2 py-4 backdrop-blur-sm sm:px-4 sm:py-8">
           <div className="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
             <button
               type="button"
               onClick={closeAthleteModal}
-              className="absolute right-4 top-4 z-20 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-surface-high text-base font-black text-white transition hover:border-primary/40 hover:bg-primary/10"
+              className="absolute right-3 top-3 z-30 flex h-9 w-9 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:bg-error hover:text-white active:bg-error active:text-white"
               aria-label="Fechar"
+              title="Fechar"
             >
-              ×
+              <X className="h-4 w-4" />
             </button>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
@@ -1167,12 +1167,6 @@ export default function App() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {view === 'dashboard' && (
-        <button onClick={() => setView('security')} className="fixed bottom-24 right-6 p-4 bg-surface-high border border-white/10 rounded-2xl shadow-2xl z-40">
-          <ShieldCheck className="w-6 h-6" />
-        </button>
-      )}
     </div>
   );
 }
