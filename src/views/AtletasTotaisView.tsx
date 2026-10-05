@@ -4,6 +4,7 @@ import { motion } from 'motion/react';
 import { Athlete } from '../types';
 import { findCountry } from '../countries';
 import { CountryFlag } from '../components/CountrySelect';
+import { Logo } from '../components/Logo';
 
 interface AtletasTotaisViewProps {
   athletes: Athlete[];
@@ -11,7 +12,7 @@ interface AtletasTotaisViewProps {
 }
 
 type ListType = 'agenciados' | 'negociados';
-type ListFilter = 'todos' | ListType | 'ambos';
+type ListFilter = 'todos' | ListType | 'dvd';
 
 // Um cartão da tela: o atleta e as listas em que ele aparece
 interface Entry {
@@ -27,7 +28,7 @@ const LIST_FILTERS: { id: ListFilter; label: string }[] = [
   { id: 'todos', label: 'Todos' },
   { id: 'agenciados', label: 'Agenciados' },
   { id: 'negociados', label: 'Negociados' },
-  { id: 'ambos', label: 'Os dois' },
+  { id: 'dvd', label: 'Com DVD' },
 ];
 
 const formatDate = (value?: string) => {
@@ -44,7 +45,7 @@ const isExpired = (value?: string) => {
 const listOf = (athlete: Athlete): ListType => athlete.listType || 'agenciados';
 const inBoth = (entry: Entry) => entry.lists.length > 1;
 const matchesList = (entry: Entry, filter: ListFilter) =>
-  filter === 'todos' || (filter === 'ambos' ? inBoth(entry) : entry.lists.includes(filter));
+  filter === 'todos' || (filter === 'dvd' ? !!entry.athlete.hasDvd : entry.lists.includes(filter));
 const listLabel = (entry: Entry) =>
   inBoth(entry) ? 'Agenciado + Negociado' : entry.lists[0] === 'negociados' ? 'Negociado' : 'Agenciado';
 const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
@@ -59,7 +60,7 @@ const categoryRank = (category: string) => {
 
 // As listas são independentes no banco: o mesmo atleta cadastrado nas duas (mesmo nome completo
 // e mesma data de nascimento) vira um cartão só, com o cadastro de Agenciados como principal
-const buildEntries = (athletes: Athlete[]): Entry[] => {
+export const buildEntries = (athletes: Athlete[]): Entry[] => {
   const groups = new Map<string, Athlete[]>();
   athletes.forEach(athlete => {
     const key = `${fullName(athlete).toLowerCase().replace(/\s+/g, ' ')}|${(athlete.birthDate || '').slice(0, 10)}`;
@@ -103,6 +104,20 @@ const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; labe
       {children}
     </div>
   </div>
+);
+
+// Marca da lista ao lado do nome: Field para Agenciados, Cosmopolitano Sports para Negociados
+const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
+  <span
+    title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
+    className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1.5"
+  >
+    {list === 'negociados' ? (
+      <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
+    ) : (
+      <Logo variant="minimal" className="h-full w-full" />
+    )}
+  </span>
 );
 
 const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: Athlete) => void }> = ({ entry, index, onSelect }) => {
@@ -167,12 +182,17 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           </span>
         </div>
 
-        <h3 className="mt-3 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
-          <span className="block truncate">{athlete.name}</span>
-          {athlete.lastName && (
-            <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
-          )}
-        </h3>
+        <div className="mt-3 flex items-center gap-3">
+          <h3 className="min-w-0 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
+            <span className="block truncate">{athlete.name}</span>
+            {athlete.lastName && (
+              <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
+            )}
+          </h3>
+          <div className="flex shrink-0 grow items-center justify-center gap-1.5">
+            {entry.lists.map(list => <ListLogo key={list} list={list} />)}
+          </div>
+        </div>
         <p className="mt-2 truncate text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
           <span className="text-primary">{athlete.position || 'Sem posição'}</span>
           {athlete.secondaryPosition && <span> · {athlete.secondaryPosition}</span>}
@@ -252,7 +272,6 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
     { label: 'Atletas', value: entries.length },
     { label: 'Agenciados', value: entries.filter(e => e.lists.includes('agenciados')).length },
     { label: 'Negociados', value: entries.filter(e => e.lists.includes('negociados')).length },
-    { label: 'Os dois', value: entries.filter(inBoth).length },
     { label: 'Com DVD', value: entries.filter(e => e.athlete.hasDvd).length },
   ];
 
@@ -292,9 +311,9 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
           </div>
         </div>
 
-        <div className="relative grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-5">
-          {summary.map(({ label, value }, index) => (
-            <div key={label} className={`bg-background/80 px-6 py-3.5 backdrop-blur sm:px-8 ${index === 0 ? 'col-span-2 sm:col-span-1' : ''}`}>
+        <div className="relative grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4">
+          {summary.map(({ label, value }) => (
+            <div key={label} className="bg-background/80 px-6 py-3.5 backdrop-blur sm:px-8">
               <p className="text-2xl font-black italic leading-none tracking-tighter text-white">
                 {String(value).padStart(2, '0')}
               </p>

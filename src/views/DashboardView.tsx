@@ -3,6 +3,9 @@ import { motion } from 'motion/react';
 import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck } from 'lucide-react';
 import { Athlete, View } from '../types';
 import { Logo } from '../components/Logo';
+import { buildEntries } from './AtletasTotaisView';
+
+const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 
 interface DashboardViewProps {
   athletes: Athlete[];
@@ -25,13 +28,51 @@ const getTimeAgo = (dateStr: string) => {
   return `Há ${diffInDays}d`;
 };
 
+// Notificações lidas ficam só neste navegador (a tabela recent_activities não guarda leitura)
+const READ_NOTIFICATIONS_KEY = 'fieldpro_read_notifications_v1';
+
+const loadReadIds = (): string[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(READ_NOTIFICATIONS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveReadIds = (ids: string[]) => {
+  try {
+    localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(ids));
+  } catch {
+    // Sem acesso ao armazenamento: a leitura vale só até recarregar a página
+  }
+};
+
+// Tipos gravados por recordActivity em App.tsx
+const describeActivity = (activity: any) => {
+  switch (activity.type) {
+    case 'CONTRATO':
+      return {
+        description: activity.title === 'NOVO ATLETA NEGOCIADO'
+          ? 'Novo atleta cadastrado em Atletas Negociados.'
+          : 'Novo atleta cadastrado em Atletas Agenciados.',
+        accent: 'text-primary',
+      };
+    case 'DVD':
+      return { description: 'DVD adicionado ao perfil do atleta.', accent: 'text-green-400' };
+    case 'ATHLETE_UPDATE':
+      return { description: 'Informações do perfil foram atualizadas.', accent: 'text-yellow-300' };
+    default:
+      return { description: activity.club ? `Clube: ${activity.club}` : '', accent: 'text-violet-300' };
+  }
+};
+
 export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [] }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
-  const inClubCount = athletes.filter(a => a.status === 'In Club').length;
-  const inClubPercentage = totalAthletes > 0 ? Math.round((inClubCount / totalAthletes) * 100) : 0;
-  
-  const indicadosCount = athletes.filter(a => a.source === 'Indicado').length;
-  const freeCount = totalAthletes - inClubCount;
+  // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
+  const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
+  const agenciadosCount = totalAthletes - negociadosCount;
+  const totalPeopleCount = buildEntries(athletes).length;
 
   const chartData = [
     { label: 'JAN', value: 62 },
@@ -42,73 +83,46 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
     { label: 'JUN', value: 94 },
   ];
 
-  const notifications = [
-    {
-      id: 'material-tatico-davi-pinn',
-      type: 'material',
-      title: 'Material Tático adicionado',
-      athleteName: 'Davi Pinn',
-      description: 'Novo material foi adicionado ao perfil do atleta.',
-      time: 'há 5 min',
-      accent: 'text-primary',
-      isRead: false,
-    },
-    {
-      id: 'dvd-ricardo-silva',
-      type: 'dvd',
-      title: 'DVD atualizado',
-      athleteName: 'Ricardo Silva',
-      description: 'Atualização de vídeo e análise técnica cadastrada.',
-      time: 'há 18 min',
-      accent: 'text-green-400',
-      isRead: true,
-    },
-    {
-      id: 'avaliacao-gabriel-santos',
-      type: 'review',
-      title: 'Avaliação finalizada',
-      athleteName: 'Gabriel Santos',
-      description: 'Relatório de desempenho foi concluído e enviado.',
-      time: 'há 1h',
-      accent: 'text-yellow-300',
-      isRead: false,
-    },
-    {
-      id: 'novo-contato-lucas-oliveira',
-      type: 'contact',
-      title: 'Novo contato registrado',
-      athleteName: 'Lucas Oliveira',
-      description: 'Representante entrou em contato e marcou revisão.',
-      time: 'há 2h',
-      accent: 'text-violet-300',
-      isRead: true,
-    },
-  ];
+  // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
+  const [readIds, setReadIds] = React.useState<string[]>(loadReadIds);
 
-  const [notificationsState, setNotificationsState] = React.useState(notifications);
+  const notifications = activities.map((activity, index) => {
+    const id = String(activity.id ?? activity.created_at ?? index);
+    const { description, accent } = describeActivity(activity);
+    return {
+      id,
+      athleteId: activity.athlete_id as string | undefined,
+      title: activity.title || 'Atualização',
+      athleteName: activity.subtitle || '',
+      description,
+      time: activity.created_at ? getTimeAgo(activity.created_at) : '',
+      accent,
+      isRead: readIds.includes(id),
+    };
+  });
 
-  const handleMarkAllAsRead = () => {
-    setNotificationsState((prev) => prev.map((notification) => ({ ...notification, isRead: true })));
+  const markAsRead = (ids: string[]) => {
+    setReadIds(prev => {
+      const next = Array.from(new Set([...prev, ...ids])).slice(-200);
+      saveReadIds(next);
+      return next;
+    });
   };
 
-  const handleOpenNotification = (athleteName: string, notificationId: string) => {
-    setNotificationsState((prev) => prev.map((notification) =>
-      notification.id === notificationId ? { ...notification, isRead: true } : notification
-    ));
+  const handleMarkAllAsRead = () => markAsRead(notifications.map(notification => notification.id));
 
-    const athlete = resolveAthlete(athleteName);
-    if (!athlete) {
-      onNavigate?.('athletes');
-      return;
-    }
-    if (onOpenAthleteProfile) {
+  const handleOpenNotification = (notification: typeof notifications[number]) => {
+    markAsRead([notification.id]);
+
+    const athlete = resolveAthlete(notification.athleteId, notification.athleteName);
+    if (athlete && onOpenAthleteProfile) {
       onOpenAthleteProfile(athlete);
       return;
     }
     onNavigate?.('athletes');
   };
 
-  const unreadCount = notificationsState.filter((notification) => !notification.isRead).length;
+  const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
   const upcomingGames: Array<{
     date: string;
@@ -126,16 +140,13 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
     { date: '2026-10-07', day: '07', month: 'Out', time: '19:00', home: 'Riviera SC', away: 'F1eld Pró FC', venue: 'Arena Central', athleteName: 'Davi Rocha', category: 'Sub-15' },
   ];
 
-  const categoryBreakdown = [
-    { label: 'Sub-10', count: 1 },
-    { label: 'Sub-11', count: 1 },
-    { label: 'Sub-12', count: 1 },
-    { label: 'Sub-13', count: 1 },
-    { label: 'Sub-14', count: 1 },
-    { label: 'Sub-15', count: 1 },
-    { label: 'Sub-17', count: 1 },
-    { label: 'Sub-20', count: 1 },
-  ];
+  // Cada pessoa conta uma vez, como no card Atletas Totais; categorias fora de CATEGORIES vão ao final
+  const people = buildEntries(athletes).map(entry => entry.athlete);
+  const extraCategories = Array.from(new Set(people.map(a => a.category).filter(c => c && !CATEGORIES.includes(c))));
+  const categoryBreakdown = [...CATEGORIES, ...extraCategories].map(label => ({
+    label,
+    count: people.filter(a => a.category === label).length,
+  }));
 
   const featuredAthletes = [...athletes]
     .map((athlete) => ({
@@ -146,17 +157,20 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
     .slice(0, 5);
 
   const statCards = [
-    { label: 'Atletas Agenciados', val: totalAthletes.toString(), icon: Users, clickable: true, useLogo: true, targetView: 'athletes' as View },
-    { label: 'Atletas Negociados', val: inClubPercentage.toString(), icon: TrendingUp, clickable: true, useBrand: true, targetView: 'negociados' as View },
-    { label: 'Atletas Totais', val: indicadosCount.toString(), icon: Users, clickable: true, usePeople: true, targetView: 'atletas-totais' as View }
+    { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: Users, clickable: true, useLogo: true, targetView: 'athletes' as View },
+    { label: 'Atletas Negociados', val: negociadosCount.toString(), icon: TrendingUp, clickable: true, useBrand: true, targetView: 'negociados' as View },
+    { label: 'Atletas Totais', val: totalPeopleCount.toString(), icon: Users, clickable: true, usePeople: true, targetView: 'atletas-totais' as View }
   ];
 
-  const resolveAthlete = (athleteName: string) => {
+  // Pelo id gravado na atividade; o nome serve só para atividades antigas sem athlete_id
+  const resolveAthlete = (athleteId: string | undefined, athleteName: string) => {
+    const byId = athleteId ? athletes.find((athlete) => athlete.id === athleteId) : undefined;
+    if (byId) return byId;
     const normalized = athleteName.trim().toLowerCase();
-    return athletes.find((athlete) => {
-      const fullName = `${athlete.name} ${athlete.lastName}`.trim().toLowerCase();
-      return fullName === normalized || athlete.name.toLowerCase() === normalized || athlete.lastName.toLowerCase() === normalized;
-    }) || athletes[0] || null;
+    if (!normalized) return null;
+    return athletes.find((athlete) =>
+      `${athlete.name} ${athlete.lastName || ''}`.trim().toLowerCase() === normalized
+    ) || null;
   };
 
   return (
@@ -272,7 +286,7 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
 
             <div className="space-y-4">
               {categoryBreakdown.map((item) => {
-                const percentage = Math.max(12, (item.count / Math.max(totalAthletes, 1)) * 100);
+                const percentage = (item.count / Math.max(totalPeopleCount, 1)) * 100;
                 return (
                   <div key={item.label}>
                     <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
@@ -316,11 +330,16 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
           </div>
 
           <div className="space-y-3">
-            {notificationsState.map((notification) => (
+            {notifications.length === 0 && (
+              <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
+                Nenhuma notificação ainda.
+              </p>
+            )}
+            {notifications.map((notification) => (
               <button
                 key={notification.id}
                 type="button"
-                onClick={() => handleOpenNotification(notification.athleteName, notification.id)}
+                onClick={() => handleOpenNotification(notification)}
                 className={`w-full rounded-2xl border p-3 text-left transition ${
                   notification.isRead
                     ? 'border-white/10 bg-[#1d1f23] hover:border-primary/35 hover:bg-[#212427]'

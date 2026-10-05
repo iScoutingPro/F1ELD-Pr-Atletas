@@ -119,6 +119,8 @@ export default function App() {
   const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
+  // Lista da aba em que o "+" foi clicado, guardada na abertura do cadastro
+  const [addingListType, setAddingListType] = useState<'agenciados' | 'negociados'>('agenciados');
   const [isViewingAthleteProfile, setIsViewingAthleteProfile] = useState(false);
   const [isEditingAthlete, setIsEditingAthlete] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -369,8 +371,10 @@ export default function App() {
         return;
       }
 
+      // O Supabase repete o evento de sessão ao voltar para a aba e ao renovar o token:
+      // só sai da tela de login, sem tirar o usuário da tela em que ele está
       if (session && hasExplicitLogin()) {
-        setView('dashboard');
+        setView(prev => (prev === 'login' ? 'dashboard' : prev));
         return;
       }
 
@@ -464,7 +468,7 @@ export default function App() {
     }
 
     // Cada atleta pertence a uma só lista: na edição mantém a dele, no cadastro entra na aba aberta
-    const listType = selectedAthlete?.listType ?? (view === 'negociados' ? 'negociados' : 'agenciados');
+    const listType = selectedAthlete?.listType ?? addingListType;
 
     if (!hasSupabaseConfig || !supabase) {
       const nextAthlete: Athlete = {
@@ -793,6 +797,7 @@ export default function App() {
     }
 
     setSelectedAthlete(null);
+    setAddingListType(view === 'negociados' ? 'negociados' : 'agenciados');
     setIsAddingAthlete(true);
   };
 
@@ -1027,10 +1032,10 @@ export default function App() {
               onClick={(e) => e.stopPropagation()}
               className="w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-surface-low shadow-[0_30px_80px_rgba(0,0,0,0.8)]"
             >
-              <div className="h-1 w-full bg-gradient-to-r from-transparent via-accent to-transparent" />
+              <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent" />
               <div className="px-8 pb-8 pt-9 text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/30 bg-accent/10">
-                  <LogOut className="h-7 w-7 text-accent" />
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10">
+                  <LogOut className="h-7 w-7 text-primary" />
                 </div>
                 <p className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-on-surface-variant">Encerrar sessão</p>
                 <h3 id="logout-confirm-title" className="mt-2 text-2xl font-black uppercase italic leading-tight tracking-tight text-white">
@@ -1051,7 +1056,7 @@ export default function App() {
                       setLogoutConfirmOpen(false);
                       await handleLogout();
                     }}
-                    className="flex-1 rounded-2xl bg-accent py-4 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-xl transition hover:scale-[1.02]"
+                    className="flex-1 rounded-2xl bg-primary py-4 text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-xl transition hover:scale-[1.02]"
                   >
                     Sair
                   </button>
