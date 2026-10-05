@@ -71,10 +71,6 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   const [category, setCategory] = useState(game?.category || '');
   const [competition, setCompetition] = useState(game?.competition || '');
   const [athleteIds, setAthleteIds] = useState<string[]>(game?.athleteIds || []);
-  // Minutos digitados por atleta (texto do campo); viram número ao salvar
-  const [minutes, setMinutes] = useState<Record<string, string>>(() =>
-    Object.fromEntries(Object.entries(game?.athleteMinutes || {}).map(([id, value]) => [id, String(value)])),
-  );
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -97,10 +93,10 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    // Só entram os minutos de quem continua vinculado ao jogo
+    // O formulário não tem mais campo de minutos: os já gravados são mantidos para quem continua vinculado ao jogo
     const athleteMinutes: Record<string, number> = {};
     athleteIds.forEach((id) => {
-      const value = parseInt(minutes[id] || '', 10);
+      const value = game?.athleteMinutes?.[id] || 0;
       if (value > 0) athleteMinutes[id] = value;
     });
     const saved = await onSave({ date, time, home, away, venue, category, competition, athleteIds, athleteMinutes }, game?.id);
@@ -187,18 +183,6 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
                   <div key={athlete.id} className="flex items-center gap-2 rounded-2xl border border-white/10 bg-surface-high p-2 sm:gap-3">
                     <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
                     <p className="min-w-0 flex-1 break-words text-[11px] font-black uppercase leading-tight tracking-[0.06em] text-white">{fullName(athlete)}</p>
-                    <div className="flex shrink-0 items-center gap-2">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={minutes[athlete.id] || ''}
-                        onChange={(e) => setMinutes((prev) => ({ ...prev, [athlete.id]: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
-                        className="w-12 sm:w-16 rounded-xl border border-white/10 bg-background px-2 py-2 text-center text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15"
-                        placeholder="0"
-                        aria-label={`Minutos jogados por ${fullName(athlete)}`}
-                      />
-                      <span className="text-[9px] font-black uppercase tracking-[0.18em] text-on-surface-variant">min</span>
-                    </div>
                     <button
                       type="button"
                       onClick={() => toggleAthlete(athlete.id)}
@@ -210,7 +194,6 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
                     </button>
                   </div>
                 ))}
-                <p className="ml-1 text-[10px] text-on-surface-variant">Informe os minutos jogados por cada atleta. Eles somam na minutagem do painel inicial.</p>
               </div>
             )}
 
