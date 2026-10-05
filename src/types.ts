@@ -55,9 +55,13 @@ export interface Game {
   category?: string;
   competition?: string;
   athleteIds: string[];
+  // Minutos jogados por atleta neste jogo (id do atleta -> minutos); quem não tem minutos lançados fica de fora
+  athleteMinutes: Record<string, number>;
+  // Scout por atleta neste jogo (id do atleta -> número do scout -> valor); as chaves dos números estão em src/scout.ts
+  athleteScouts?: Record<string, Record<string, number>>;
 }
 
-export type View ='login' | 'dashboard' | 'calendar' | 'scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
+export type View ='login' | 'dashboard' | 'calendar' | 'scout' | 'lancar-scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
 export interface NavItem {
   id: View;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldCheck, FileText, CalendarDays, BriefcaseBusiness, UserRound, BadgeCheck, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
+import { ShieldCheck, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Imports from Libs & Types
@@ -8,10 +8,10 @@ import { MOCK_ATHLETES } from './data';
 import { Athlete, Game, View } from './types';
 
 // Imports from Components
-import { TopAppBar } from './components/TopAppBar';
-import { BottomNavBar } from './components/BottomNavBar';
+import { SideNavBar } from './components/SideNavBar';
 import { AthleteInfo } from './components/AthleteInfo';
 import { AthleteGames } from './components/AthleteGames';
+import { AthleteScout } from './components/AthleteScout';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
@@ -27,6 +27,7 @@ import { RecoveryView, VerificationView } from './views/AuthSubViews';
 import { SecurityView, SuccessView } from './views/SecuritySubViews';
 import { SessionsView } from './views/SessionsView';
 import { CalendarView } from './views/CalendarView';
+import { ScoutEntryView } from './views/ScoutEntryView';
 
 const AUTH_SESSION_KEY = 'fieldpro_authenticated_v1';
 const RLS_VIOLATION_CODE = '42501';
@@ -66,6 +67,8 @@ const mapGameRow = (g: any): Game => ({
   category: g.category || undefined,
   competition: g.competition || undefined,
   athleteIds: g.athlete_ids || [],
+  athleteMinutes: g.athlete_minutes || {},
+  athleteScouts: g.athlete_scouts || {},
 });
 
 // Traduz o erro do Supabase para um aviso legível na interface
@@ -130,7 +133,7 @@ export default function App() {
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [profileDetailView, setProfileDetailView] = useState<'documents' | 'calendar' | 'business' | 'profile' | 'status' | null>(null);
+  const [profileDetailView, setProfileDetailView] = useState<'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf' | null>(null);
   const athleteImageInputRef = useRef<HTMLInputElement | null>(null);
   const clubLogoInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -719,12 +722,18 @@ export default function App() {
     }
 
     if (!hasSupabaseConfig || !supabase) {
-      const nextGame: Game = { ...gameData, id: id || `local-${Date.now()}` };
+      const nextGame: Game = { athleteScouts: games.find(g => g.id === id)?.athleteScouts, ...gameData, id: id || `local-${Date.now()}` };
       setGames(prev => [nextGame, ...prev.filter(g => g.id !== nextGame.id)]);
       return true;
     }
 
+    // A coluna athlete_minutes só vai no envio quando há minutos a gravar ou a apagar:
+    // assim jogo sem minutagem continua salvando mesmo antes de rodar de novo o supabase/games.sql
+    const hadMinutes = Object.keys(games.find(g => g.id === id)?.athleteMinutes || {}).length > 0;
+    const sendMinutes = hadMinutes || Object.keys(gameData.athleteMinutes).length > 0;
+
     const payload = {
+      ...(sendMinutes ? { athlete_minutes: gameData.athleteMinutes } : {}),
       game_date: gameData.date,
       game_time: gameData.time || null,
       home: gameData.home.trim(),
@@ -753,6 +762,42 @@ export default function App() {
 
     const savedGame = mapGameRow(data[0]);
     setGames(prev => [savedGame, ...prev.filter(g => g.id !== savedGame.id)]);
+    return true;
+  };
+
+  // Grava o scout do jogo (aba "Scout"); substitui o scout inteiro daquele jogo
+  const handleSaveScouts = async (gameId: string, scouts: Record<string, Record<string, number>>): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('lançar', 'scout'));
+      return false;
+    }
+
+    if (!hasSupabaseConfig || !supabase || gameId.startsWith('local-')) {
+      setGames(prev => prev.map(g => (g.id === gameId ? { ...g, athleteScouts: scouts } : g)));
+      return true;
+    }
+
+    const { data, error } = await supabase.from('games').update({ athlete_scouts: scouts }).eq('id', gameId).select();
+
+    if (error) {
+      console.error('Erro ao salvar scout:', error);
+      setNotice(error.code === MISSING_COLUMN_CODE
+        ? {
+            title: 'Scout não configurado',
+            message: 'O banco de dados ainda não está preparado para o scout. Execute o arquivo supabase/games.sql no SQL Editor do Supabase e tente de novo.',
+          }
+        : gameErrorNotice('Erro ao salvar scout', error));
+      return false;
+    }
+
+    // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+    if (!data || data.length === 0) {
+      setNotice(notAllowedMessage('lançar', 'scout'));
+      return false;
+    }
+
+    const savedGame = mapGameRow(data[0]);
+    setGames(prev => prev.map(g => (g.id === savedGame.id ? savedGame : g)));
     return true;
   };
 
@@ -833,7 +878,7 @@ export default function App() {
       case 'login': return <LoginView onLogin={() => setView('dashboard')} onForgot={() => setView('recovery')} />;
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
-      case 'dashboard': return <DashboardView athletes={athletes} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} />;
+      case 'dashboard': return <DashboardView athletes={athletes} games={games} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} />;
       case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'negociados': return (
@@ -860,7 +905,9 @@ export default function App() {
           onDeleteGame={isAdmin ? handleDeleteGame : undefined}
         />
       );
-      default: return <DashboardView athletes={athletes} />;
+      // Só admin lança scout; os demais caem no painel (default)
+      case 'lancar-scout': if (isAdmin) return <ScoutEntryView games={games} athletes={athletes} onSaveScouts={handleSaveScouts} />;
+      default: return <DashboardView athletes={athletes} games={games} />;
     }
   };
 
@@ -868,16 +915,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
-      {showShell && (
-        <TopAppBar 
-          title="" 
-          onBack={view === 'security' ? () => setView('settings') : undefined} 
-          onLogoClick={view !== 'dashboard' ? () => setView('dashboard') : undefined}
-          onLogout={confirmLogout}
-        />
-      )}
-      
-      <main className="relative">
+      {showShell && <SideNavBar activeView={view} setView={setView} isAdmin={isAdmin} onLogout={confirmLogout} />}
+
+      <main className={`relative ${showShell ? 'pl-16 lg:pl-80' : ''}`}>
         <AnimatePresence mode="wait">
           <motion.div key={view} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.3 }}>
             {renderView()}
@@ -885,8 +925,6 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-      {showShell && <BottomNavBar activeView={view} setView={setView} athleteCount={athletes.length} />}
-      
       {(selectedAthlete && isViewingAthleteProfile) ? (
         <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
           <div className="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
@@ -951,13 +989,13 @@ export default function App() {
                     </button>
                   </div>
                   <div className="flex items-center justify-between gap-1.5 rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur">
-                    {[{ key: 'documents', icon: FileText, label: 'Documentos' }, { key: 'calendar', icon: CalendarDays, label: 'Agenda' }, { key: 'business', icon: BriefcaseBusiness, label: 'Negócios' }, { key: 'profile', icon: UserRound, label: 'Perfil' }, { key: 'status', icon: BadgeCheck, label: 'Status' }].map(({ key, icon: Icon, label }) => (
+                    {[{ key: 'calendar', icon: CalendarDays, label: 'Calendário' }, { key: 'stats', icon: BarChart3, label: 'Scout' }, { key: 'tactical', icon: Presentation, label: 'Acompanhamento Tático' }, { key: 'contract', icon: ScrollText, label: 'Contrato' }, { key: 'pdf', icon: FileText, label: 'PDF' }].map(({ key, icon: Icon, label }) => (
                       <button
                         key={key}
                         type="button"
-                        // Clicar de novo no ícone da Agenda volta para as informações do perfil
-                        onClick={() => setProfileDetailView(prev => (key === 'calendar' && prev === 'calendar' ? null : key as 'documents' | 'calendar' | 'business' | 'profile' | 'status'))}
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${key === 'calendar' && profileDetailView === 'calendar' ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
+                        // Clicar de novo no ícone aberto (Calendário ou Scout) volta para as informações do perfil
+                        onClick={() => setProfileDetailView(prev => ((key === 'calendar' || key === 'stats') && prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${(key === 'calendar' || key === 'stats') && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >
@@ -977,6 +1015,8 @@ export default function App() {
               />
               {profileDetailView === 'calendar' ? (
                 <AthleteGames athlete={selectedAthlete} games={games} />
+              ) : profileDetailView === 'stats' ? (
+                <AthleteScout athlete={selectedAthlete} games={games} />
               ) : (
                 <AthleteInfo athlete={selectedAthlete} />
               )}

@@ -49,7 +49,7 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
   );
 
   return (
-    <div className="pt-24 pb-32 px-6 max-w-5xl mx-auto space-y-8">
+    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10 space-y-8">
       <div className="flex items-end justify-between">
         <div className="border-l-4 border-primary pl-4">
           <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>
@@ -142,7 +142,7 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
         {filteredAthletes.map((athlete) => (
           <div key={athlete.id} onClick={() => onSelectAthlete(athlete)} className="bg-surface-low p-4 rounded-3xl border border-white/5 flex items-center gap-6 group hover:bg-surface-high transition-all cursor-pointer">
             <div className="w-24 h-24 rounded-2xl overflow-hidden border border-white/10">

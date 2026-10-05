@@ -74,7 +74,7 @@ export const AgenciadosNegociadosView = ({ athletes, onSelectAthlete }: Agenciad
   };
 
   return (
-    <div className="pt-24 pb-32 px-6 max-w-7xl mx-auto space-y-12">
+    <div className="pt-10 pb-12 px-6 max-w-7xl mx-auto space-y-12">
       <section className="max-w-2xl mx-auto relative">
         <form onSubmit={handleSearch} className="relative group z-[70]">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-on-surface-variant group-focus-within:text-primary transition-colors" />

@@ -68,6 +68,10 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   const [category, setCategory] = useState(game?.category || '');
   const [competition, setCompetition] = useState(game?.competition || '');
   const [athleteIds, setAthleteIds] = useState<string[]>(game?.athleteIds || []);
+  // Minutos digitados por atleta (texto do campo); viram número ao salvar
+  const [minutes, setMinutes] = useState<Record<string, string>>(() =>
+    Object.fromEntries(Object.entries(game?.athleteMinutes || {}).map(([id, value]) => [id, String(value)])),
+  );
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -90,7 +94,13 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const saved = await onSave({ date, time, home, away, venue, category, competition, athleteIds }, game?.id);
+    // Só entram os minutos de quem continua vinculado ao jogo
+    const athleteMinutes: Record<string, number> = {};
+    athleteIds.forEach((id) => {
+      const value = parseInt(minutes[id] || '', 10);
+      if (value > 0) athleteMinutes[id] = value;
+    });
+    const saved = await onSave({ date, time, home, away, venue, category, competition, athleteIds, athleteMinutes }, game?.id);
     setSaving(false);
     if (saved) onClose();
   };
@@ -168,20 +178,35 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
             <label className={labelClass}>Atletas vinculados ({athleteIds.length})</label>
 
             {selectedAthletes.length > 0 && (
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-2">
                 {selectedAthletes.map((athlete) => (
-                  <button
-                    key={athlete.id}
-                    type="button"
-                    onClick={() => toggleAthlete(athlete.id)}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary py-1 pl-1 pr-3 text-[10px] font-black uppercase tracking-[0.12em] text-background transition hover:opacity-80"
-                    title="Remover do jogo"
-                  >
-                    <img src={athlete.image} alt="" className="h-6 w-6 rounded-full object-cover" />
-                    {fullName(athlete)}
-                    <X className="h-3 w-3" />
-                  </button>
+                  <div key={athlete.id} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-surface-high p-2">
+                    <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                    <p className="min-w-0 flex-1 break-words text-[11px] font-black uppercase leading-tight tracking-[0.06em] text-white">{fullName(athlete)}</p>
+                    <div className="flex shrink-0 items-center gap-2">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={minutes[athlete.id] || ''}
+                        onChange={(e) => setMinutes((prev) => ({ ...prev, [athlete.id]: e.target.value.replace(/\D/g, '').slice(0, 3) }))}
+                        className="w-16 rounded-xl border border-white/10 bg-background px-2 py-2 text-center text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15"
+                        placeholder="0"
+                        aria-label={`Minutos jogados por ${fullName(athlete)}`}
+                      />
+                      <span className="text-[9px] font-black uppercase tracking-[0.18em] text-on-surface-variant">min</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => toggleAthlete(athlete.id)}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/75 transition hover:border-primary hover:bg-primary hover:text-background"
+                      aria-label="Remover do jogo"
+                      title="Remover do jogo"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
                 ))}
+                <p className="ml-1 text-[10px] text-on-surface-variant">Informe os minutos jogados por cada atleta. Eles somam na minutagem do painel inicial.</p>
               </div>
             )}
 
@@ -320,8 +345,8 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
   const selectedDateValue = new Date(`${selectedDate}T12:00:00`);
 
   return (
-    <div className="min-h-screen px-6 pt-24 pb-28">
-      <div className="mx-auto max-w-6xl">
+    <div className="min-h-screen px-6 pb-12 pt-10 lg:px-10">
+      <div className="mx-auto w-full max-w-[1600px]">
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="rounded-[28px] border border-white/10 bg-surface-low/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
             <div className="mb-4 flex items-center justify-between gap-2 rounded-full border border-white/10 bg-[#1a1d22]/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -503,6 +528,11 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                                     {[athlete.position, athlete.category].filter(Boolean).join(' · ')}
                                   </p>
                                 </div>
+                                {game.athleteMinutes[athlete.id] > 0 && (
+                                  <span className="flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-[0.14em] text-white">
+                                    <Clock3 className="h-3 w-3" /> {game.athleteMinutes[athlete.id]} min
+                                  </span>
+                                )}
                                 <ChevronRight className="h-4 w-4 shrink-0 text-white/30 transition group-hover:translate-x-0.5 group-hover:text-white" />
                               </button>
                             ))}

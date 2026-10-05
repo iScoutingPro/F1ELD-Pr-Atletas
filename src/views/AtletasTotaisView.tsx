@@ -22,6 +22,8 @@ interface Entry {
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.06] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_30px_80px_-40px_rgba(0,0,0,0.9)]';
 const labelClass = 'text-[9px] font-black uppercase tracking-[0.24em] text-on-surface-variant/70';
+// Rótulos dentro do cartão do atleta, um pouco maiores que os dos painéis
+const cardLabelClass = 'text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant/70';
 const fieldClass = 'w-full rounded-2xl border border-white/10 bg-black/30 text-xs font-bold text-on-surface outline-none transition focus:border-primary/60 focus:bg-black/40';
 
 const LIST_FILTERS: { id: ListFilter; label: string }[] = [
@@ -96,11 +98,11 @@ const FilterSelect = ({ value, onChange, placeholder, options }: { value: string
 
 const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; label: string; muted?: boolean; children: React.ReactNode }) => (
   <div className="min-w-0">
-    <p className={`${labelClass} flex items-center gap-1.5`}>
+    <p className={`${cardLabelClass} flex items-center gap-1.5`}>
       <Icon className="h-3 w-3 shrink-0" />
       {label}
     </p>
-    <div className={`mt-1 flex min-w-0 items-center gap-1.5 text-[13px] font-bold ${muted ? 'text-on-surface-variant/45' : 'text-on-surface'}`}>
+    <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 text-sm font-bold ${muted ? 'text-on-surface-variant/45' : 'text-on-surface'}`}>
       {children}
     </div>
   </div>
@@ -110,7 +112,7 @@ const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; labe
 const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
   <span
     title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
-    className="flex h-14 w-20 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1.5"
+    className="flex h-16 w-24 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1.5"
   >
     {list === 'negociados' ? (
       <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
@@ -148,7 +150,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
       <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/[0.05] blur-3xl transition duration-500 group-hover:bg-white/[0.09]" />
 
-      <div className="relative w-28 shrink-0 self-stretch overflow-hidden bg-surface-high sm:w-36">
+      <div className="relative w-28 shrink-0 self-stretch overflow-hidden bg-surface-high sm:w-40">
         {athlete.image ? (
           <img
             src={athlete.image}
@@ -163,8 +165,8 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-white/10" />
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-3">
-          <span className="truncate text-[10px] font-black uppercase tracking-[0.2em] text-white">{athlete.category || 'Sem categoria'}</span>
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-2.5">
+          <span className="truncate text-[11px] font-black uppercase tracking-[0.2em] text-white">{athlete.category || 'Sem categoria'}</span>
           <div className="flex shrink-0 items-center gap-1">
             {country && <CountryFlag country={country} className="h-3.5 w-5 ring-1 ring-white/20" />}
             {secondCountry && <CountryFlag country={secondCountry} className="h-3.5 w-5 ring-1 ring-white/20" />}
@@ -172,18 +174,18 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         </div>
       </div>
 
-      <div className="relative min-w-0 flex-1 p-5">
+      <div className="relative min-w-0 flex-1 p-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="truncate rounded-full bg-primary px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
+          <span className="truncate rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
             {listLabel(entry)}
           </span>
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-background">
-            <ArrowUpRight className="h-3.5 w-3.5" />
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-background">
+            <ArrowUpRight className="h-3 w-3" />
           </span>
         </div>
 
-        <div className="mt-3 flex items-center gap-3">
-          <h3 className="min-w-0 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
+        <div className="mt-2.5 flex items-center gap-3">
+          <h3 className="min-w-0 text-2xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
             <span className="block truncate">{athlete.name}</span>
             {athlete.lastName && (
               <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
@@ -193,24 +195,24 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
             {entry.lists.map(list => <ListLogo key={list} list={list} />)}
           </div>
         </div>
-        <p className="mt-2 truncate text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
+        <p className="mt-1.5 truncate text-[11px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
           <span className="text-primary">{athlete.position || 'Sem posição'}</span>
           {athlete.secondaryPosition && <span> · {athlete.secondaryPosition}</span>}
         </p>
 
-        <div className="mt-4 grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-3">
+        <div className="mt-3 grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-2">
           {stats.map(({ label, value, unit }) => (
             <div key={label} className="min-w-0 px-2 text-center first:pl-0 last:pr-0">
-              <p className="truncate text-base font-black italic leading-none tracking-tight text-white">
+              <p className="truncate text-lg font-black italic leading-none tracking-tight text-white">
                 {value || <span className="text-on-surface-variant/30">—</span>}
-                {value && unit && <span className="ml-0.5 text-[8px] font-black uppercase not-italic tracking-[0.1em] text-on-surface-variant">{unit}</span>}
+                {value && unit && <span className="ml-0.5 text-[9px] font-black uppercase not-italic tracking-[0.1em] text-on-surface-variant">{unit}</span>}
               </p>
-              <p className={`${labelClass} mt-1`}>{label}</p>
+              <p className={`${cardLabelClass} mt-1`}>{label}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
           <Detail icon={Shield} label="Clube Atual">
             {athlete.clubLogo && <img src={athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
             <span className="truncate">{club}</span>
@@ -222,7 +224,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
             <span className="truncate">
               {athlete.contractLevel || (athlete.contractType ? 'Cadastrado' : 'Sem contrato')}
               {contractEnd && (
-                <span className={`ml-1.5 text-[11px] ${expired ? 'text-error' : 'text-on-surface-variant'}`}>
+                <span className={`ml-1.5 text-xs ${expired ? 'text-error' : 'text-on-surface-variant'}`}>
                   · {expired ? 'encerrado em' : 'até'} {contractEnd}
                 </span>
               )}
@@ -284,7 +286,7 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 pb-32 pt-24">
+    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10 space-y-6">
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -364,7 +366,7 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
       </section>
 
       {filtered.length > 0 ? (
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2 min-[1800px]:grid-cols-3">
           {filtered.map((entry, index) => (
             <AthleteCard key={entry.athlete.id} entry={entry} index={index} onSelect={onSelectAthlete} />
           ))}

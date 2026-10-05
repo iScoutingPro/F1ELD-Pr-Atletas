@@ -2,7 +2,7 @@ import React from 'react';
 import { FileText, ChevronDown } from 'lucide-react';
 
 export const ReportsView = () => (
-  <div className="pt-24 pb-32 px-6 max-w-5xl mx-auto space-y-12">
+  <div className="pt-10 pb-12 px-6 max-w-5xl mx-auto space-y-12">
     <div className="border-l-4 border-primary pl-4">
       <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">Relatórios</h2>
       <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">Análise de Dados & Performance</span>

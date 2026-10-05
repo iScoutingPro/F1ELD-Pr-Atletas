@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck } from 'lucide-react';
-import { Athlete, View } from '../types';
+import { Athlete, Game, View } from '../types';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
 
@@ -9,6 +9,7 @@ const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub
 
 interface DashboardViewProps {
   athletes: Athlete[];
+  games?: Game[];
   onAthletesClick?: () => void;
   onNavigate?: (view: View) => void;
   onOpenAthleteProfile?: (athlete: Athlete) => void;
@@ -67,20 +68,43 @@ const describeActivity = (activity: any) => {
   }
 };
 
-export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [] }: DashboardViewProps) => {
+export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [] }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
   // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
   const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
   const agenciadosCount = totalAthletes - negociadosCount;
   const totalPeopleCount = buildEntries(athletes).length;
 
-  const chartData = [
-    { label: 'JAN', value: 62 },
-    { label: 'FEV', value: 68 },
-    { label: 'MAR', value: 75 },
-    { label: 'ABR', value: 82 },
-    { label: 'MAI', value: 88 },
-    { label: 'JUN', value: 94 },
+  // Minutagem real: soma dos minutos lançados em cada jogo do calendário (Game.athleteMinutes).
+  // Minutos de atleta já apagado ficam de fora. O gráfico cobre os últimos 6 meses, separado por lista.
+  const today = new Date();
+  const chartData = Array.from({ length: 6 }, (_, i) => {
+    const month = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1);
+    return {
+      key: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
+      label: month.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(),
+      field: 0,
+      cosmopolitano: 0,
+    };
+  });
+  const athletesById = new Map(athletes.map(athlete => [athlete.id, athlete]));
+  const minutesByAthlete = new Map<string, number>();
+  games.forEach(game => {
+    const month = chartData.find(item => item.key === game.date.slice(0, 7));
+    Object.entries(game.athleteMinutes || {}).forEach(([athleteId, minutes]) => {
+      const athlete = athletesById.get(athleteId);
+      if (!athlete || !(minutes > 0)) return;
+      minutesByAthlete.set(athleteId, (minutesByAthlete.get(athleteId) || 0) + minutes);
+      if (!month) return;
+      if (athlete.listType === 'negociados') month.cosmopolitano += minutes;
+      else month.field += minutes;
+    });
+  });
+  const chartTotal = chartData.reduce((acc, item) => acc + item.field + item.cosmopolitano, 0);
+  const chartMax = Math.max(1, ...chartData.map(item => Math.max(item.field, item.cosmopolitano)));
+  const chartSeries = [
+    { key: 'field' as const, label: 'F1eld (Agenciados)', barClass: 'bg-primary' },
+    { key: 'cosmopolitano' as const, label: 'Cosmopolitano (Negociados)', barClass: 'bg-primary/35' },
   ];
 
   // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
@@ -124,21 +148,25 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
 
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
 
-  const upcomingGames: Array<{
-    date: string;
-    day: string;
-    month: string;
-    time: string;
-    home: string;
-    away: string;
-    venue: string;
-    athleteName: string;
-    category: string;
-  }> = [
-    { date: '2026-09-30', day: '30', month: 'Set', time: '17:45', home: 'Lions FC', away: 'F1eld Pró FC', venue: 'Complexo Esportivo', athleteName: 'Gabriel Nunes', category: 'Sub-17' },
-    { date: '2026-10-02', day: '02', month: 'Out', time: '20:30', home: 'F1eld Pró FC', away: 'Belo Horizonte FC', venue: 'Estádio do Vale', athleteName: 'Lucas Mendes', category: 'Sub-20' },
-    { date: '2026-10-07', day: '07', month: 'Out', time: '19:00', home: 'Riviera SC', away: 'F1eld Pró FC', venue: 'Arena Central', athleteName: 'Davi Rocha', category: 'Sub-15' },
-  ];
+  // Próximos jogos: os mesmos da aba Calendário (tabela games), de hoje em diante, por data e horário
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const upcomingGames = games
+    .filter(game => game.date >= todayKey)
+    .sort((a, b) => `${a.date} ${a.time || ''}`.localeCompare(`${b.date} ${b.time || ''}`))
+    .slice(0, 5)
+    .map(game => {
+      const date = new Date(`${game.date}T12:00:00`);
+      return {
+        ...game,
+        day: String(date.getDate()).padStart(2, '0'),
+        month: date.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''),
+        // Id de atleta apagado é ignorado, como no Calendário
+        athleteNames: game.athleteIds
+          .map(id => athletesById.get(id))
+          .filter((athlete): athlete is Athlete => !!athlete)
+          .map(athlete => `${athlete.name} ${athlete.lastName || ''}`.trim()),
+      };
+    });
 
   // Cada pessoa conta uma vez, como no card Atletas Totais; categorias fora de CATEGORIES vão ao final
   const people = buildEntries(athletes).map(entry => entry.athlete);
@@ -148,13 +176,13 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
     count: people.filter(a => a.category === label).length,
   }));
 
-  const featuredAthletes = [...athletes]
-    .map((athlete) => ({
-      ...athlete,
-      minutes: Math.round(2100 + athlete.stats.tactical * 8 + athlete.stats.physical * 6 + athlete.stats.technical * 7),
-    }))
+  // Top 5 pelo total de minutos lançados nos jogos; quem não tem minutos não entra
+  const featuredAthletes = athletes
+    .map((athlete) => ({ ...athlete, minutes: minutesByAthlete.get(athlete.id) || 0 }))
+    .filter((athlete) => athlete.minutes > 0)
     .sort((a, b) => b.minutes - a.minutes)
     .slice(0, 5);
+  const topMinutes = featuredAthletes[0]?.minutes || 1;
 
   const statCards = [
     { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: Users, clickable: true, useLogo: true, targetView: 'athletes' as View },
@@ -174,7 +202,7 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
   };
 
   return (
-    <div className="pt-24 pb-32 px-6 max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10">
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {statCards.map((stat, i) => (
           <div 
@@ -242,6 +270,11 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
             </div>
 
             <div className="space-y-3">
+              {featuredAthletes.length === 0 && (
+                <p className="rounded-2xl border border-white/10 bg-surface-high p-4 text-center text-[11px] text-on-surface-variant">
+                  Nenhuma minutagem cadastrada ainda. Informe os minutos de cada atleta nos jogos do Calendário.
+                </p>
+              )}
               {featuredAthletes.map((athlete, index) => (
                 <div key={athlete.id} className="rounded-2xl border border-white/5 bg-surface-high p-3">
                   <div className="flex items-center gap-3">
@@ -264,7 +297,7 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
                   <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-lowest">
                     <motion.div
                       initial={{ width: 0 }}
-                      animate={{ width: `${Math.min(100, (athlete.minutes / 3200) * 100)}%` }}
+                      animate={{ width: `${(athlete.minutes / topMinutes) * 100}%` }}
                       transition={{ duration: 0.8, delay: index * 0.1 }}
                       className="h-full rounded-full bg-gradient-to-r from-primary to-primary/55"
                     />
@@ -379,26 +412,47 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
               <h3 className="text-[1.7rem] font-black text-white italic uppercase leading-none">Minutagem Atletas F1eld/Cosmopolitano</h3>
             </div>
             <div className="flex items-center gap-2 bg-surface-high px-3 py-2 rounded-xl">
-              <TrendingUp className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-primary">+18.4%</span>
+              <Clock3 className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-primary">{chartTotal.toLocaleString('pt-BR')} min</span>
             </div>
           </div>
 
-          <div className="flex h-48 items-end gap-3 px-2">
-            {chartData.map((item, index) => (
-              <div key={item.label} className="flex flex-1 flex-col items-center gap-3">
-                <div className="flex h-36 w-full items-end justify-center">
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${item.value}%` }}
-                    transition={{ duration: 0.7, delay: index * 0.08 }}
-                    className="w-full rounded-t-2xl bg-gradient-to-t from-primary via-primary/80 to-primary/40 shadow-[0_0_24px_rgba(0,255,0,0.18)]"
-                  />
-                </div>
-                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{item.label}</span>
-              </div>
+          <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-2">
+            {chartSeries.map((series) => (
+              <span key={series.key} className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+                <span className={`h-2.5 w-2.5 rounded-sm ${series.barClass}`} />
+                {series.label}
+              </span>
             ))}
+            <span className="ml-auto text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Últimos 6 meses</span>
           </div>
+
+          {chartTotal === 0 ? (
+            <p className="rounded-2xl border border-white/10 bg-surface-high p-6 text-center text-[11px] text-on-surface-variant">
+              Nenhuma minutagem cadastrada nos últimos 6 meses. Informe os minutos de cada atleta nos jogos do Calendário.
+            </p>
+          ) : (
+            <div className="flex items-end gap-3 px-2">
+              {chartData.map((item, index) => (
+                <div key={item.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                  <div className="flex h-36 w-full items-end justify-center gap-1">
+                    {chartSeries.map((series) => (
+                      <motion.div
+                        key={series.key}
+                        initial={{ height: 0 }}
+                        animate={{ height: `${(item[series.key] / chartMax) * 100}%` }}
+                        transition={{ duration: 0.7, delay: index * 0.08 }}
+                        title={`${series.label}: ${item[series.key].toLocaleString('pt-BR')} min`}
+                        className={`w-full max-w-10 rounded-t-xl ${series.barClass}`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{item.label}</span>
+                  <span className="text-[10px] font-black text-white">{(item.field + item.cosmopolitano).toLocaleString('pt-BR')} min</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -421,9 +475,14 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
           </div>
 
           <div className="space-y-3">
+            {upcomingGames.length === 0 && (
+              <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
+                Nenhum próximo jogo cadastrado no Calendário.
+              </p>
+            )}
             {upcomingGames.map((game) => (
               <button
-                key={game.date}
+                key={game.id}
                 type="button"
                 onClick={() => onNavigate?.('calendar')}
                 className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-[#1d1f23] p-3 text-left transition hover:border-primary/40 hover:bg-[#212427]"
@@ -437,24 +496,41 @@ export const DashboardView = ({ athletes, onAthletesClick, onNavigate, onOpenAth
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-primary">
                       <CalendarDays className="h-3.5 w-3.5" />
-                      <span>{game.time}</span>
+                      <span>{game.time || '--:--'}</span>
+                      {game.competition && <span className="min-w-0 break-words text-on-surface-variant">· {game.competition}</span>}
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-sm font-black uppercase italic text-white">
-                      <span>{game.home}</span>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-black uppercase italic text-white">
+                      <span className="break-words">{game.home}</span>
                       <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-on-surface-variant">VS</span>
-                      <span>{game.away}</span>
+                      <span className="break-words">{game.away}</span>
                     </div>
-                    <div className="mt-1 flex items-center gap-2 text-[8px] font-black uppercase tracking-[0.16em] text-on-surface-variant">
-                      <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[7px] text-primary">{game.category}</span>
-                      <MapPin className="h-3 w-3 text-primary" />
-                      <span>{game.venue}</span>
-                    </div>
+                    {(game.category || game.venue) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[8px] font-black uppercase tracking-[0.16em] text-on-surface-variant">
+                        {game.category && (
+                          <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[7px] text-primary">{game.category}</span>
+                        )}
+                        {game.venue && (
+                          <>
+                            <MapPin className="h-3 w-3 shrink-0 text-primary" />
+                            <span className="break-words">{game.venue}</span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <div className="min-w-[110px] max-w-[140px] text-right">
-                  <p className="text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">Atleta</p>
-                  <p className="truncate text-[10px] font-black uppercase tracking-[0.12em] text-white">{game.athleteName}</p>
+                <div className="min-w-[110px] max-w-[160px] text-right">
+                  <p className="text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
+                    {game.athleteNames.length === 1 ? 'Atleta' : 'Atletas'}
+                  </p>
+                  {game.athleteNames.length > 0 ? (
+                    game.athleteNames.map((name) => (
+                      <p key={name} className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-white">{name}</p>
+                    ))
+                  ) : (
+                    <p className="text-[10px] text-on-surface-variant">Nenhum vinculado</p>
+                  )}
                 </div>
               </button>
             ))}
