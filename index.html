@@ -2,12 +2,21 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <!-- maximum-scale=1 evita o zoom automático do iPhone ao tocar num campo de texto -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Field Pro Atletas</title>
+    <meta name="theme-color" content="#171717" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Ao "Adicionar à Tela de Início" no iPhone, abre em tela cheia, com nome e ícone próprios -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Field Pro" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

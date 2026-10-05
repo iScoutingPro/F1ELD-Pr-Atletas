@@ -133,6 +133,17 @@ export default function App() {
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // O sino do menu lateral abre e fecha a central de notificações do painel; o painel informa quantas não foram lidas
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const toggleNotifications = () => {
+    const open = view !== 'dashboard' || !showNotifications;
+    setShowNotifications(open);
+    if (open) {
+      setView('dashboard');
+      window.scrollTo({ top: 0 });
+    }
+  };
   const [profileDetailView, setProfileDetailView] = useState<'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf' | null>(null);
   const athleteImageInputRef = useRef<HTMLInputElement | null>(null);
   const clubLogoInputRef = useRef<HTMLInputElement | null>(null);
@@ -878,7 +889,7 @@ export default function App() {
       case 'login': return <LoginView onLogin={() => setView('dashboard')} onForgot={() => setView('recovery')} />;
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
-      case 'dashboard': return <DashboardView athletes={athletes} games={games} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} />;
+      case 'dashboard': return <DashboardView athletes={athletes} games={games} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
       case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'negociados': return (
@@ -915,7 +926,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
-      {showShell && <SideNavBar activeView={view} setView={setView} isAdmin={isAdmin} onLogout={confirmLogout} />}
+      {showShell && <SideNavBar activeView={view} setView={(next) => { setShowNotifications(false); setView(next); }}isAdmin={isAdmin} onLogout={confirmLogout} onToggleNotifications={toggleNotifications} notificationsOpen={view === 'dashboard' && showNotifications} unreadNotifications={unreadNotifications} />}
 
       <main className={`relative ${showShell ? 'pl-16 lg:pl-80' : ''}`}>
         <AnimatePresence mode="wait">
@@ -926,18 +937,19 @@ export default function App() {
       </main>
 
       {(selectedAthlete && isViewingAthleteProfile) ? (
-        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-4 py-8 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-2 py-4 backdrop-blur-sm sm:px-4 sm:py-8">
           <div className="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/15 via-primary/5 to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
 
-            <div className="relative px-6 pb-8 pt-10 sm:px-10">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex min-w-0 flex-1 items-center justify-center gap-5">
+            <div className="relative px-4 pb-6 pt-5 sm:px-10 sm:pb-8 sm:pt-10">
+              {/* Em tela estreita os botões sobem para cima da foto e do nome; a partir de `md` ficam à direita */}
+              <div className="flex flex-col-reverse gap-5 md:flex-row md:items-center md:justify-between md:gap-4">
+                <div className="flex min-w-0 items-center gap-4 md:flex-1 md:justify-center md:gap-5">
                   <button
                     type="button"
                     onClick={() => athleteImageInputRef.current?.click()}
-                    className="group relative h-28 w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/70 ring-offset-4 ring-offset-[#17191c] transition hover:scale-[1.02]"
+                    className="group relative h-20 w-20 md:h-28 md:w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/70 ring-offset-4 ring-offset-[#17191c] transition hover:scale-[1.02]"
                     aria-label="Trocar foto do atleta"
                   >
                     <img src={selectedAthlete.image} alt={selectedAthlete.name} className="h-full w-full object-cover" />
@@ -947,7 +959,7 @@ export default function App() {
                   </button>
 
                   <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-3xl font-black uppercase italic leading-none text-white">
+                    <h2 className="break-words text-2xl font-black uppercase italic leading-none text-white md:truncate md:text-3xl">
                       {selectedAthlete.name} {selectedAthlete.lastName}
                     </h2>
                     <div className="mt-4 flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em]">
@@ -966,7 +978,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="flex shrink-0 flex-col items-stretch gap-3 self-center">
+                <div className={`flex shrink-0 gap-3 md:flex-col md:items-stretch md:self-center ${isAdmin ? 'flex-col items-stretch' : 'flex-row-reverse items-center'}`}>
                   <div className="flex items-center justify-end gap-2">
                     {isAdmin && (
                       <button
@@ -988,14 +1000,14 @@ export default function App() {
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="flex items-center justify-between gap-1.5 rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+                  <div className="flex flex-1 items-center justify-between gap-1.5 md:flex-none rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur">
                     {[{ key: 'calendar', icon: CalendarDays, label: 'Calendário' }, { key: 'stats', icon: BarChart3, label: 'Scout' }, { key: 'tactical', icon: Presentation, label: 'Acompanhamento Tático' }, { key: 'contract', icon: ScrollText, label: 'Contrato' }, { key: 'pdf', icon: FileText, label: 'PDF' }].map(({ key, icon: Icon, label }) => (
                       <button
                         key={key}
                         type="button"
                         // Clicar de novo no ícone aberto (Calendário ou Scout) volta para as informações do perfil
                         onClick={() => setProfileDetailView(prev => ((key === 'calendar' || key === 'stats') && prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
-                        className={`flex h-9 w-9 items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${(key === 'calendar' || key === 'stats') && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
+                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${(key === 'calendar' || key === 'stats') && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >

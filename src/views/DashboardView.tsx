@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck } from 'lucide-react';
+import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck, Trash2 } from 'lucide-react';
 import { Athlete, Game, View } from '../types';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
@@ -14,6 +14,9 @@ interface DashboardViewProps {
   onNavigate?: (view: View) => void;
   onOpenAthleteProfile?: (athlete: Athlete) => void;
   activities?: any[];
+  // A central de notificações fica fechada até clicar no sino do menu lateral; aberta, o resto do painel some (atributo hidden)
+  showNotifications?: boolean;
+  onUnreadChange?: (count: number) => void;
 }
 
 const getTimeAgo = (dateStr: string) => {
@@ -32,20 +35,23 @@ const getTimeAgo = (dateStr: string) => {
 // Notificações lidas ficam só neste navegador (a tabela recent_activities não guarda leitura)
 const READ_NOTIFICATIONS_KEY = 'fieldpro_read_notifications_v1';
 
-const loadReadIds = (): string[] => {
+// "Limpar notificações" também vale só neste navegador: as linhas continuam no banco e nos outros aparelhos
+const CLEARED_NOTIFICATIONS_KEY = 'fieldpro_cleared_notifications_v1';
+
+const loadIds = (key: string): string[] => {
   try {
-    const parsed = JSON.parse(localStorage.getItem(READ_NOTIFICATIONS_KEY) || '[]');
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
     return [];
   }
 };
 
-const saveReadIds = (ids: string[]) => {
+const saveIds = (key: string, ids: string[]) => {
   try {
-    localStorage.setItem(READ_NOTIFICATIONS_KEY, JSON.stringify(ids));
+    localStorage.setItem(key, JSON.stringify(ids));
   } catch {
-    // Sem acesso ao armazenamento: a leitura vale só até recarregar a página
+    // Sem acesso ao armazenamento: vale só até recarregar a página
   }
 };
 
@@ -68,7 +74,7 @@ const describeActivity = (activity: any) => {
   }
 };
 
-export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [] }: DashboardViewProps) => {
+export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
   // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
   const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
@@ -108,7 +114,8 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
   ];
 
   // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
-  const [readIds, setReadIds] = React.useState<string[]>(loadReadIds);
+  const [readIds, setReadIds] = React.useState<string[]>(() => loadIds(READ_NOTIFICATIONS_KEY));
+  const [clearedIds, setClearedIds] = React.useState<string[]>(() => loadIds(CLEARED_NOTIFICATIONS_KEY));
 
   const notifications = activities.map((activity, index) => {
     const id = String(activity.id ?? activity.created_at ?? index);
@@ -123,12 +130,21 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
       accent,
       isRead: readIds.includes(id),
     };
-  });
+  }).filter(notification => !clearedIds.includes(notification.id));
 
   const markAsRead = (ids: string[]) => {
     setReadIds(prev => {
       const next = Array.from(new Set([...prev, ...ids])).slice(-200);
-      saveReadIds(next);
+      saveIds(READ_NOTIFICATIONS_KEY, next);
+      return next;
+    });
+  };
+
+  // Some com as notificações atuais da lista; as novas continuam chegando
+  const handleClearNotifications = () => {
+    setClearedIds(prev => {
+      const next = Array.from(new Set([...prev, ...notifications.map(notification => notification.id)])).slice(-200);
+      saveIds(CLEARED_NOTIFICATIONS_KEY, next);
       return next;
     });
   };
@@ -147,6 +163,10 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
   };
 
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
+  // O sino do menu lateral (celular) mostra este número
+  React.useEffect(() => {
+    onUnreadChange?.(unreadCount);
+  }, [unreadCount, onUnreadChange]);
 
   // Próximos jogos: os mesmos da aba Calendário (tabela games), de hoje em diante, por data e horário
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -202,8 +222,9 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10">
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    // Ordem na tela: contagens, próximos jogos, Top 5 e categorias, minutagem (no celular as classes max-sm:order-* mantêm essa ordem)
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10">
+      <section hidden={showNotifications} className="-order-2 grid grid-cols-3 gap-2 sm:gap-4">
         {statCards.map((stat, i) => (
           <div 
             key={i} 
@@ -216,7 +237,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
                 onAthletesClick();
               }
             }}
-            className={`bg-surface-low p-5 rounded-2xl border border-white/5 relative overflow-hidden group transition-all cursor-pointer hover:bg-surface-high hover:border-primary/30`}
+            className={`bg-surface-low p-3 sm:p-5 rounded-2xl border border-white/5 relative overflow-hidden group transition-all cursor-pointer hover:bg-surface-high hover:border-primary/30`}
           >
             <div className="absolute -right-4 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
               {stat.useBrand ? (
@@ -249,20 +270,21 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
               )}
             </div>
             <div className="relative z-10">
-              <div className="text-3xl font-black tracking-tighter text-white italic leading-none mb-1">{stat.val}</div>
-              <div className="text-[8px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{stat.label}</div>
+              <div className="text-3xl font-black tracking-tighter text-white italic leading-none mb-1.5 sm:mb-1">{stat.val}</div>
+              <div className="text-[8px] font-black uppercase leading-tight tracking-[0.06em] sm:tracking-[0.2em] text-on-surface-variant">{stat.label}</div>
             </div>
           </div>
         ))}
       </section>
 
-      <section className="mt-6 grid grid-cols-1 xl:grid-cols-[1.35fr_0.95fr] gap-5">
-        <div className="space-y-5">
-          <div className="bg-surface-low p-5 rounded-[1.75rem] border border-white/5">
+      {/* max-sm:contents: no celular os dois blocos entram direto na ordem da página (notificações logo abaixo do sino) */}
+      <section className={`grid grid-cols-1 gap-5 max-sm:contents ${showNotifications ? '' : 'sm:mt-6'}`}>
+        <div hidden={showNotifications} className="space-y-3 max-sm:order-3 max-sm:mt-3 sm:space-y-5 xl:grid xl:grid-cols-2 xl:gap-5 xl:space-y-0">
+          <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Destaque</p>
-                <h3 className="text-[1.7rem] font-black text-white italic uppercase mt-1 leading-none">Top 5</h3>
+                <h3 className="text-xl sm:text-[1.7rem] font-black text-white italic uppercase mt-1 leading-none">Top 5</h3>
               </div>
               <div className="p-2 rounded-xl bg-surface-high">
                 <Trophy className="w-4 h-4 text-primary" />
@@ -307,26 +329,27 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
             </div>
           </div>
 
-          <div className="bg-surface-low p-5 rounded-[1.75rem] border border-white/5">
+          <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-[1.7rem] font-black text-white italic uppercase leading-none">Atleta por categoria</h3>
+                <h3 className="text-xl sm:text-[1.7rem] font-black text-white italic uppercase leading-none">Atleta por categoria</h3>
               </div>
               <div className="p-2 rounded-xl bg-surface-high">
                 <Star className="w-4 h-4 text-primary" />
               </div>
             </div>
 
-            <div className="space-y-4">
+            {/* No celular cada categoria vira um quadro (número em cima, nome embaixo), três por linha, sem a barra */}
+            <div className="max-sm:grid max-sm:grid-cols-3 max-sm:gap-2 sm:space-y-4">
               {categoryBreakdown.map((item) => {
                 const percentage = (item.count / Math.max(totalPeopleCount, 1)) * 100;
                 return (
-                  <div key={item.label}>
-                    <div className="mb-1 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
+                  <div key={item.label} className="max-sm:rounded-xl max-sm:border max-sm:border-white/5 max-sm:bg-surface-high max-sm:px-1 max-sm:py-2.5">
+                    <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant max-sm:flex-col-reverse max-sm:gap-1 max-sm:text-[8px] max-sm:tracking-normal sm:mb-1">
                       <span>{item.label}</span>
-                      <span>{item.count}</span>
+                      <span className={`max-sm:text-xl max-sm:italic max-sm:leading-none ${item.count > 0 ? 'max-sm:text-white' : 'max-sm:text-white/25'}`}>{item.count}</span>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-highest">
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-highest max-sm:hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${percentage}%` }}
@@ -341,11 +364,11 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
           </div>
         </div>
 
-        <aside className="rounded-[1.75rem] border border-white/10 bg-surface-low p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+        <aside hidden={!showNotifications} className="rounded-[1.75rem] border border-white/10 bg-surface-low p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Atualizações</p>
-              <h3 className="mt-2 text-[1.5rem] font-black uppercase italic leading-none text-white">Notificações</h3>
+              <h3 className="mt-2 text-xl sm:text-[1.5rem] font-black uppercase italic leading-none text-white">Notificações</h3>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex h-9 min-w-[2.25rem] items-center justify-center rounded-full border border-primary/30 bg-primary/10 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-primary">
@@ -362,11 +385,21 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
             </div>
           </div>
 
-          <div className="space-y-3">
+          <div className="flex flex-col gap-3">
             {notifications.length === 0 && (
               <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
                 Nenhuma notificação ainda.
               </p>
+            )}
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearNotifications}
+                className="order-last flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-surface-high px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary/40"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Limpar notificações
+              </button>
             )}
             {notifications.map((notification) => (
               <button
@@ -404,14 +437,14 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
         </aside>
       </section>
 
-      <section className="mt-5">
-        <div className="bg-surface-low p-5 rounded-[1.75rem] border border-white/5">
-          <div className="flex items-center justify-between mb-5">
-            <div>
+      <section hidden={showNotifications} className="mt-3 max-sm:order-4 sm:mt-5">
+        <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+            <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Performance</p>
-              <h3 className="text-[1.7rem] font-black text-white italic uppercase leading-none">Minutagem Atletas F1eld/Cosmopolitano</h3>
+              <h3 className="break-words text-xl sm:text-[1.7rem] font-black text-white italic uppercase leading-none">Minutagem Atletas F1eld/Cosmopolitano</h3>
             </div>
-            <div className="flex items-center gap-2 bg-surface-high px-3 py-2 rounded-xl">
+            <div className="flex shrink-0 items-center gap-2 bg-surface-high px-3 py-2 rounded-xl">
               <Clock3 className="w-4 h-4 text-primary" />
               <span className="text-[10px] font-black uppercase tracking-widest text-primary">{chartTotal.toLocaleString('pt-BR')} min</span>
             </div>
@@ -432,7 +465,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
               Nenhuma minutagem cadastrada nos últimos 6 meses. Informe os minutos de cada atleta nos jogos do Calendário.
             </p>
           ) : (
-            <div className="flex items-end gap-3 px-2">
+            <div className="flex items-end gap-1.5 sm:gap-3 sm:px-2">
               {chartData.map((item, index) => (
                 <div key={item.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
                   <div className="flex h-36 w-full items-end justify-center gap-1">
@@ -448,7 +481,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
                     ))}
                   </div>
                   <span className="text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{item.label}</span>
-                  <span className="text-[10px] font-black text-white">{(item.field + item.cosmopolitano).toLocaleString('pt-BR')} min</span>
+                  <span className="text-[10px] font-black text-white">{(item.field + item.cosmopolitano).toLocaleString('pt-BR')}<span className="hidden sm:inline"> min</span></span>
                 </div>
               ))}
             </div>
@@ -456,12 +489,13 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
         </div>
       </section>
 
-      <section className="mt-5">
-        <div className="rounded-[1.75rem] border border-white/10 bg-surface-low p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+      {/* A pedido do usuário, "Próximos jogos" vem logo abaixo das contagens (-order-2 e -order-1), em qualquer tela */}
+      <section hidden={showNotifications} className="-order-1 mt-3 sm:mt-6">
+        <div className="rounded-[1.75rem] border border-white/10 bg-surface-low p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Próximos jogos</p>
-              <h3 className="mt-1 text-[1.4rem] font-black uppercase italic leading-none text-white">Agenda</h3>
+              <h3 className="mt-1 text-xl sm:text-[1.4rem] font-black uppercase italic leading-none text-white">Agenda</h3>
             </div>
 
             <button
@@ -485,10 +519,10 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
                 key={game.id}
                 type="button"
                 onClick={() => onNavigate?.('calendar')}
-                className="flex w-full items-center gap-3 rounded-2xl border border-white/10 bg-[#1d1f23] p-3 text-left transition hover:border-primary/40 hover:bg-[#212427]"
+                className="flex w-full flex-col gap-3 rounded-2xl border border-white/10 bg-[#1d1f23] p-3 text-left transition hover:border-primary/40 hover:bg-[#212427] sm:flex-row sm:items-center"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex h-12 w-12 flex-col items-center justify-center rounded-xl border border-white/10 bg-surface-high text-center">
+                  <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-surface-high text-center">
                     <span className="text-lg font-black leading-none text-white">{game.day}</span>
                     <span className="text-[7px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{game.month}</span>
                   </div>
@@ -520,7 +554,7 @@ export const DashboardView = ({ athletes, games = [], onAthletesClick, onNavigat
                   </div>
                 </div>
 
-                <div className="min-w-[110px] max-w-[160px] text-right">
+                <div className="border-t border-white/10 pt-2 sm:min-w-[110px] sm:max-w-[160px] sm:border-0 sm:pt-0 sm:text-right">
                   <p className="text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
                     {game.athleteNames.length === 1 ? 'Atleta' : 'Atletas'}
                   </p>

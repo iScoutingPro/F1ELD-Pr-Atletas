@@ -94,7 +94,7 @@ export const ScoutEntryView = ({ games, athletes, onSaveScouts }: ScoutEntryView
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10 space-y-6">
+    <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-6">
       <section className={`${panelClass} p-6`}>
         <div className="flex flex-wrap items-center gap-3">
           <ClipboardList className="h-5 w-5 text-primary" />

@@ -345,16 +345,16 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
   const selectedDateValue = new Date(`${selectedDate}T12:00:00`);
 
   return (
-    <div className="min-h-screen px-6 pb-12 pt-10 lg:px-10">
+    <div className="min-h-screen px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10">
       <div className="mx-auto w-full max-w-[1600px]">
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="rounded-[28px] border border-white/10 bg-surface-low/80 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
-            <div className="mb-4 flex items-center justify-between gap-2 rounded-full border border-white/10 bg-[#1a1d22]/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="rounded-[28px] border border-white/10 bg-surface-low/80 p-3 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-4">
+            <div className="mb-4 flex items-center justify-between gap-2 rounded-[2rem] border border-white/10 bg-[#1a1d22]/80 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <button onClick={() => moveMonth(-1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-surface-high text-on-surface-variant transition hover:border-primary/40 hover:text-white hover:shadow-[0_0_0_1px_rgba(59,130,246,0.2)]">
                 <ChevronLeft className="h-4 w-4" />
               </button>
 
-              <div className="flex flex-1 items-center justify-center gap-2 text-center">
+              <div className="flex flex-1 flex-col items-center justify-center gap-1.5 text-center sm:flex-row sm:gap-2">
                 <button
                   onClick={resetToInitialMonth}
                   disabled={isCurrentMonth && selectedDate === todayKey}
@@ -368,8 +368,8 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                 </button>
 
                 <div className="flex items-center justify-center gap-2 text-center">
-                  <span className="text-sm font-black uppercase tracking-[0.18em] text-white">{getMonthShortLabel(currentMonth)}</span>
-                  <span className="text-sm font-black uppercase tracking-[0.18em] text-on-surface-variant">{currentMonth.getFullYear()}</span>
+                  <span className="text-xs sm:text-sm font-black uppercase tracking-[0.18em] text-white">{getMonthShortLabel(currentMonth)}</span>
+                  <span className="text-xs sm:text-sm font-black uppercase tracking-[0.18em] text-on-surface-variant">{currentMonth.getFullYear()}</span>
                 </div>
               </div>
 
@@ -378,9 +378,9 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
               </button>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 text-center">
+            <div className="grid grid-cols-7 gap-1 text-center sm:gap-2">
               {weekDays.map((day) => (
-                <div key={day} className="py-2 text-[10px] font-black uppercase tracking-[0.25em] text-on-surface-variant">
+                <div key={day} className="py-2 text-[10px] font-black uppercase tracking-[0.08em] text-on-surface-variant sm:tracking-[0.25em]">
                   {day}
                 </div>
               ))}
@@ -395,7 +395,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                   <button
                     key={key}
                     onClick={() => setSelectedDate(key)}
-                    className={`relative flex h-20 flex-col items-center justify-center rounded-2xl border transition-all ${
+                    className={`relative flex h-14 flex-col items-center justify-center rounded-xl border transition-all sm:h-20 sm:rounded-2xl ${
                       isSelected
                         ? 'border-primary bg-primary/15 text-white shadow-[0_12px_30px_rgba(59,130,246,0.25)]'
                         : isInMonth
@@ -413,7 +413,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
             </div>
           </motion.div>
 
-          <motion.aside initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="flex h-[calc(100vh-10rem)] min-h-[420px] flex-col rounded-[28px] border border-white/10 bg-surface-low/80 p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+          <motion.aside initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="flex flex-col rounded-[28px] border border-white/10 bg-surface-low/80 p-3 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:p-5 xl:h-[calc(100vh-10rem)] xl:min-h-[420px]">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Agenda</p>
@@ -435,7 +435,8 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
             </div>
 
             <div
-              className="agenda-scroll flex-1 space-y-3 overflow-y-auto pr-1"
+              // Só rola por dentro quando a agenda fica ao lado do calendário; empilhada (celular), cresce com a página
+              className="agenda-scroll flex-1 space-y-3 xl:overflow-y-auto xl:pr-1"
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#7a7a7a transparent' }}
             >
               {selectedGames.length > 0 ? (
@@ -474,7 +475,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                         )}
                       </div>
 
-                      <div className="relative grid grid-cols-[1fr_auto_1fr] items-start gap-3 px-5 pb-5 pt-5">
+                      <div className="relative grid grid-cols-[1fr_auto_1fr] items-start gap-2 px-3 pb-5 pt-5 sm:gap-3 sm:px-5">
                         <div className="flex min-w-0 flex-col items-center gap-2.5 text-center">
                           <TeamCrest name={game.home} logo={clubLogos.get(game.home.trim().toLowerCase())} />
                           <p className="w-full break-words text-[13px] font-black uppercase italic leading-tight text-white">{game.home}</p>

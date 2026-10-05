@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, UserCheck, Handshake, CalendarRange, ClipboardList, LogOut, ChevronRight } from 'lucide-react';
+import { LayoutGrid, Users, UserCheck, Handshake, CalendarRange, ClipboardList, LogOut, ChevronRight, Bell } from 'lucide-react';
 import { View, NavItem } from '../types';
 import { Logo } from './Logo';
 
@@ -8,10 +8,13 @@ interface SideNavBarProps {
   setView: (v: View) => void;
   isAdmin?: boolean;
   onLogout: () => void;
+  onToggleNotifications?: () => void;
+  notificationsOpen?: boolean;
+  unreadNotifications?: number;
 }
 
 // Menu lateral fixo à esquerda: faixa só de ícones em telas pequenas, com os nomes a partir de `lg`
-export const SideNavBar = ({ activeView, setView, isAdmin, onLogout }: SideNavBarProps) => {
+export const SideNavBar = ({ activeView, setView, isAdmin, onLogout, onToggleNotifications, notificationsOpen = false, unreadNotifications = 0 }: SideNavBarProps) => {
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
     { id: 'calendar', label: 'Calendário', icon: CalendarRange },
@@ -90,7 +93,28 @@ export const SideNavBar = ({ activeView, setView, isAdmin, onLogout }: SideNavBa
 
       <div className="relative mx-3 h-px shrink-0 bg-gradient-to-r from-transparent via-white/15 to-transparent lg:mx-8" />
 
-      <div className="relative shrink-0 p-2 lg:p-5">
+      <div className="relative shrink-0 space-y-2 p-2 lg:p-5">
+        {/* A central de notificações do painel fica recolhida e abre por este sino */}
+        <button
+          type="button"
+          onClick={onToggleNotifications}
+          title="Notificações"
+          aria-label="Notificações"
+          aria-expanded={notificationsOpen}
+          className={`group flex w-full items-center justify-center gap-4 rounded-2xl border p-1.5 text-left transition-all duration-300 lg:justify-start lg:px-3 lg:py-3 ${
+            notificationsOpen
+              ? 'border-white/15 bg-gradient-to-r from-white/[0.14] to-white/[0.03] text-white shadow-[0_10px_30px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.12)]'
+              : 'border-transparent text-on-surface-variant hover:border-white/5 hover:bg-white/[0.04] hover:text-white'
+          }`}
+        >
+          <span className={`relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-300 lg:h-11 lg:w-11 ${notificationsOpen ? 'bg-primary text-background shadow-[0_6px_20px_rgba(255,255,255,0.18)]' : 'bg-white/5 ring-1 ring-inset ring-white/5 group-hover:bg-white/10'}`}>
+            <Bell className="h-[18px] w-[18px] lg:h-5 lg:w-5" strokeWidth={notificationsOpen ? 2.4 : 2} />
+            {unreadNotifications > 0 && (
+              <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full border border-[#0d0e10] bg-primary px-1 text-[9px] font-black leading-none text-background lg:h-5 lg:min-w-5 lg:text-[10px]">{unreadNotifications}</span>
+            )}
+          </span>
+          <span className={`hidden min-w-0 flex-1 text-sm uppercase tracking-[0.12em] lg:block ${notificationsOpen ? 'font-black' : 'font-semibold'}`}>Notificações</span>
+        </button>
         <button
           type="button"
           onClick={onLogout}

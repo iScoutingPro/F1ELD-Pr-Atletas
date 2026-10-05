@@ -39,7 +39,7 @@ const InfoRow = ({ icon: Icon, label, value, children }: { icon: LucideIcon; lab
     </div>
     <div className="min-w-0 flex-1">
       <p className={labelClass}>{label}</p>
-      <p className={`mt-1 truncate text-sm font-bold ${value ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>{value || 'Não informado'}</p>
+      <p className={`mt-1 break-words text-sm font-bold sm:truncate ${value ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>{value || 'Não informado'}</p>
     </div>
     {children}
   </div>

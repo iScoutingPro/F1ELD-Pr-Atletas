@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Search, Shield, Users, Video, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Athlete } from '../types';
 import { findCountry } from '../countries';
@@ -84,8 +84,8 @@ export const buildEntries = (athletes: Athlete[]): Entry[] => {
 
 const unique = (values: string[]) => Array.from(new Set(values.filter(Boolean)));
 
-const FilterSelect = ({ value, onChange, placeholder, options }: { value: string; onChange: (value: string) => void; placeholder: string; options: string[] }) => (
-  <div className="relative">
+const FilterSelect = ({ value, onChange, placeholder, options, className = '' }: { value: string; onChange: (value: string) => void; placeholder: string; options: string[]; className?: string }) => (
+  <div className={`relative ${className}`}>
     <select value={value} onChange={(e) => onChange(e.target.value)} className={`${fieldClass} appearance-none py-3.5 pl-4 pr-10`}>
       <option value="" className="bg-surface-high">{placeholder}</option>
       {options.map(option => (
@@ -96,8 +96,8 @@ const FilterSelect = ({ value, onChange, placeholder, options }: { value: string
   </div>
 );
 
-const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; label: string; muted?: boolean; children: React.ReactNode }) => (
-  <div className="min-w-0">
+const Detail = ({ icon: Icon, label, muted, className = '', children }: { icon: LucideIcon; label: string; muted?: boolean; className?: string; children: React.ReactNode }) => (
+  <div className={`min-w-0 ${className}`}>
     <p className={`${cardLabelClass} flex items-center gap-1.5`}>
       <Icon className="h-3 w-3 shrink-0" />
       {label}
@@ -112,7 +112,7 @@ const Detail = ({ icon: Icon, label, muted, children }: { icon: LucideIcon; labe
 const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
   <span
     title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
-    className="flex h-16 w-24 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1.5"
+    className="flex h-10 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-16 sm:w-24 sm:p-1.5"
   >
     {list === 'negociados' ? (
       <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
@@ -145,12 +145,13 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay: Math.min(index, 10) * 0.04, ease: [0.22, 1, 0.36, 1] }}
       onClick={() => onSelect?.(athlete)}
-      className={`${panelClass} group relative flex w-full overflow-hidden text-left transition duration-500 hover:-translate-y-1 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_40px_90px_-40px_rgba(255,255,255,0.22)]`}
+      // No celular a foto fica ao lado do nome e a faixa de números e os detalhes ocupam a largura toda, embaixo
+      className={`${panelClass} group relative grid w-full grid-cols-[6rem_minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden text-left sm:grid-cols-[10rem_minmax(0,1fr)] transition duration-500 hover:-translate-y-1 hover:border-white/30 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_40px_90px_-40px_rgba(255,255,255,0.22)]`}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
       <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-white/[0.05] blur-3xl transition duration-500 group-hover:bg-white/[0.09]" />
 
-      <div className="relative w-28 shrink-0 self-stretch overflow-hidden bg-surface-high sm:w-40">
+      <div className="relative overflow-hidden bg-surface-high sm:row-span-2">
         {athlete.image ? (
           <img
             src={athlete.image}
@@ -165,8 +166,8 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         )}
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
         <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-white/10" />
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-2.5">
-          <span className="truncate text-[11px] font-black uppercase tracking-[0.2em] text-white">{athlete.category || 'Sem categoria'}</span>
+        <div className="absolute inset-x-0 bottom-0 flex flex-col items-start gap-1 p-2 sm:flex-row sm:items-end sm:justify-between sm:gap-2 sm:p-2.5">
+          <span className="max-w-full truncate text-[10px] font-black uppercase tracking-[0.12em] text-white sm:text-[11px] sm:tracking-[0.2em]">{athlete.category || 'Sem categoria'}</span>
           <div className="flex shrink-0 items-center gap-1">
             {country && <CountryFlag country={country} className="h-3.5 w-5 ring-1 ring-white/20" />}
             {secondCountry && <CountryFlag country={secondCountry} className="h-3.5 w-5 ring-1 ring-white/20" />}
@@ -174,7 +175,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         </div>
       </div>
 
-      <div className="relative min-w-0 flex-1 p-4">
+      <div className="relative min-w-0 p-3 sm:px-4 sm:pb-0 sm:pt-4">
         <div className="flex items-center justify-between gap-3">
           <span className="truncate rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
             {listLabel(entry)}
@@ -185,13 +186,13 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
         </div>
 
         <div className="mt-2.5 flex items-center gap-3">
-          <h3 className="min-w-0 text-2xl font-black uppercase italic leading-[0.95] tracking-tighter text-white">
+          <h3 className="min-w-0 text-xl font-black uppercase italic leading-[0.95] tracking-tighter text-white sm:text-2xl">
             <span className="block truncate">{athlete.name}</span>
             {athlete.lastName && (
               <span className="block truncate bg-gradient-to-r from-white/60 to-white/20 bg-clip-text pr-1 text-transparent">{athlete.lastName}</span>
             )}
           </h3>
-          <div className="flex shrink-0 grow items-center justify-center gap-1.5">
+          <div className="flex shrink-0 grow flex-col items-center justify-center gap-1.5 sm:flex-row">
             {entry.lists.map(list => <ListLogo key={list} list={list} />)}
           </div>
         </div>
@@ -199,8 +200,10 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           <span className="text-primary">{athlete.position || 'Sem posição'}</span>
           {athlete.secondaryPosition && <span> · {athlete.secondaryPosition}</span>}
         </p>
+      </div>
 
-        <div className="mt-3 grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-2">
+      <div className="relative col-span-2 min-w-0 px-3 pb-3 sm:col-span-1 sm:col-start-2 sm:px-4 sm:pb-4">
+        <div className="grid grid-cols-4 divide-x divide-white/10 border-y border-white/10 py-2 sm:mt-3">
           {stats.map(({ label, value, unit }) => (
             <div key={label} className="min-w-0 px-2 text-center first:pl-0 last:pr-0">
               <p className="truncate text-lg font-black italic leading-none tracking-tight text-white">
@@ -212,7 +215,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           ))}
         </div>
 
-        <div className="mt-3 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
           <Detail icon={Shield} label="Clube Atual">
             {athlete.clubLogo && <img src={athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
             <span className="truncate">{club}</span>
@@ -220,7 +223,8 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           <Detail icon={MapPin} label="Cidade/Estado" muted={!athlete.naturalidade}>
             <span className="truncate">{athlete.naturalidade || 'Não informado'}</span>
           </Detail>
-          <Detail icon={FileText} label="Contrato" muted={!hasContract}>
+          {/* No celular o contrato vai para a última linha, na largura toda, para a data não ser cortada */}
+          <Detail icon={FileText} label="Contrato" muted={!hasContract} className="order-last col-span-2 sm:order-none sm:col-span-1">
             <span className="truncate">
               {athlete.contractLevel || (athlete.contractType ? 'Cadastrado' : 'Sem contrato')}
               {contractEnd && (
@@ -277,6 +281,17 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
     { label: 'Com DVD', value: entries.filter(e => e.athlete.hasDvd).length },
   ];
 
+  // Contagem mostrada em cada botão de lista no celular (no computador ela fica na faixa do topo)
+  const listCounts: Record<ListFilter, number> = {
+    todos: summary[0].value,
+    agenciados: summary[1].value,
+    negociados: summary[2].value,
+    dvd: summary[3].value,
+  };
+  // Categoria e posição ficam recolhidas no celular, atrás do botão ao lado da busca
+  const [showFilters, setShowFilters] = useState(false);
+  const selectCount = (category ? 1 : 0) + (position ? 1 : 0);
+
   const hasFilters = !!search || listFilter !== 'todos' || !!category || !!position;
   const clearFilters = () => {
     setSearch('');
@@ -286,24 +301,35 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10 space-y-6">
+    <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-3 sm:space-y-6">
+      {/* Celular: só o título e o contador, para os cartões aparecerem logo; as contagens vão nos botões de lista */}
+      <div className="flex items-end justify-between gap-3 sm:hidden">
+        <h2 className="text-2xl font-black uppercase italic leading-none tracking-tighter text-white">
+          Atletas{' '}
+          <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">Totais</span>
+        </h2>
+        <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
+          <span className="text-primary">{filtered.length}</span> de {entries.length}
+        </p>
+      </div>
+
       <motion.section
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className={`${panelClass} relative overflow-hidden`}
+        className={`${panelClass} relative hidden overflow-hidden sm:block`}
       >
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
         <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-white/[0.09] blur-3xl" />
         <div className="pointer-events-none absolute -bottom-40 -left-24 h-72 w-72 rounded-full bg-white/[0.04] blur-3xl" />
 
-        <div className="relative flex flex-wrap items-end justify-between gap-4 px-6 py-5 sm:px-8">
+        <div className="relative flex flex-wrap items-end justify-between gap-3 px-4 py-4 sm:gap-4 sm:px-8 sm:py-5">
           <div>
             <p className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.34em] text-on-surface-variant">
               <span className="h-px w-6 bg-primary" />
               Carteira completa
             </p>
-            <h2 className="mt-2 text-3xl font-black uppercase italic leading-none tracking-tighter text-white md:text-4xl">
+            <h2 className="mt-2 text-2xl font-black uppercase italic leading-none tracking-tighter text-white sm:text-3xl md:text-4xl">
               Atletas{' '}
               <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">Totais</span>
             </h2>
@@ -313,55 +339,71 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
           </div>
         </div>
 
-        <div className="relative grid grid-cols-2 gap-px border-t border-white/10 bg-white/10 sm:grid-cols-4">
+        <div className="relative grid grid-cols-4 gap-px border-t border-white/10 bg-white/10">
           {summary.map(({ label, value }) => (
-            <div key={label} className="bg-background/80 px-6 py-3.5 backdrop-blur sm:px-8">
-              <p className="text-2xl font-black italic leading-none tracking-tighter text-white">
+            <div key={label} className="bg-background/80 px-1 py-3 text-center backdrop-blur sm:px-8 sm:py-3.5 sm:text-left">
+              <p className="text-xl font-black italic leading-none tracking-tighter text-white sm:text-2xl">
                 {String(value).padStart(2, '0')}
               </p>
-              <p className={`${labelClass} mt-1`}>{label}</p>
+              <p className="mt-1 text-[8px] font-black uppercase tracking-[0.06em] text-on-surface-variant/70 sm:text-[9px] sm:tracking-[0.24em]">{label}</p>
             </div>
           ))}
         </div>
       </motion.section>
 
-      <section className={`${panelClass} space-y-3 p-3 sm:p-4`}>
-        <div className="relative">
-          <Search className="absolute left-5 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nome ou clube..."
-            className={`${fieldClass} py-4 pl-12 pr-12 text-sm text-white placeholder:text-on-surface-variant/50`}
-          />
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              aria-label="Limpar busca"
-              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full p-1 text-on-surface-variant transition hover:text-primary"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          )}
+      {/* No celular o painel some: ficam a busca, o botão que abre categoria e posição e os botões de lista em grade 2×2 */}
+      <section className={`${panelClass} space-y-2 max-sm:rounded-none max-sm:border-0 max-sm:bg-none max-sm:shadow-none sm:space-y-3 sm:p-4`}>
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant sm:left-5" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por nome ou clube..."
+              className={`${fieldClass} py-3 pl-11 pr-10 text-sm text-white placeholder:text-on-surface-variant/50 sm:py-4 sm:pl-12 sm:pr-12`}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Limpar busca"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-on-surface-variant transition hover:text-primary sm:right-4"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters(prev => !prev)}
+            aria-label="Filtrar por categoria e posição"
+            aria-expanded={showFilters}
+            className={`relative flex w-12 shrink-0 items-center justify-center rounded-2xl border transition sm:hidden ${showFilters || selectCount > 0 ? 'border-primary bg-primary text-background' : 'border-white/10 bg-black/30 text-on-surface-variant'}`}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            {selectCount > 0 && (
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full border border-background bg-primary text-[9px] font-black text-background">{selectCount}</span>
+            )}
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[auto_1fr_1fr]">
-          <div className="flex overflow-x-auto rounded-2xl border border-white/10 bg-black/30 p-1">
+        <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-[auto_1fr_1fr]">
+          <FilterSelect value={category} onChange={setCategory} placeholder="Todas as categorias" options={categories} className={`sm:order-2 sm:block ${showFilters ? '' : 'hidden'}`} />
+          <FilterSelect value={position} onChange={setPosition} placeholder="Todas as posições" options={positions} className={`sm:order-3 sm:block ${showFilters ? '' : 'hidden'}`} />
+          <div className="grid grid-cols-2 gap-1.5 sm:order-1 sm:flex sm:gap-0 sm:overflow-x-auto sm:rounded-2xl sm:border sm:border-white/10 sm:bg-black/30 sm:p-1">
             {LIST_FILTERS.map(({ id, label }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setListFilter(id)}
-                className={`flex-1 whitespace-nowrap rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] transition duration-300 ${listFilter === id ? 'bg-primary text-background shadow-[0_8px_24px_-8px_rgba(255,255,255,0.6)]' : 'text-on-surface-variant hover:text-white'}`}
+                className={`whitespace-nowrap rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-[0.1em] transition duration-300 max-sm:flex max-sm:items-center max-sm:justify-between max-sm:border sm:flex-1 sm:px-4 sm:py-2.5 sm:tracking-[0.18em] ${listFilter === id ? 'border-primary bg-primary text-background shadow-[0_8px_24px_-8px_rgba(255,255,255,0.6)]' : 'border-white/10 text-on-surface-variant hover:text-white'}`}
               >
                 {label}
+                <span className="ml-1.5 opacity-60 sm:hidden">{listCounts[id]}</span>
               </button>
             ))}
           </div>
-          <FilterSelect value={category} onChange={setCategory} placeholder="Todas as categorias" options={categories} />
-          <FilterSelect value={position} onChange={setPosition} placeholder="Todas as posições" options={positions} />
         </div>
       </section>
 

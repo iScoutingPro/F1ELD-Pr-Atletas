@@ -49,14 +49,14 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] px-6 pb-12 pt-10 lg:px-10 space-y-8">
-      <div className="flex items-end justify-between">
-        <div className="border-l-4 border-primary pl-4">
-          <h2 className="text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>
+    <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-8">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0 border-l-4 border-primary pl-4">
+          <h2 className="text-2xl sm:text-4xl font-black tracking-tighter text-white leading-none italic uppercase">{title}</h2>
           <span className="font-bold uppercase tracking-widest text-[10px] text-on-surface-variant">{subtitle}</span>
         </div>
         {onAddAthlete && (
-          <button onClick={onAddAthlete} className="p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
+          <button onClick={onAddAthlete} className="shrink-0 p-4 bg-primary text-background rounded-2xl hover:scale-105 transition-all shadow-xl">
             <Plus className="w-6 h-6" />
           </button>
         )}
@@ -144,21 +144,21 @@ export const AthletesListView = ({ athletes, onSelectAthlete, onAddAthlete, titl
 
       <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4">
         {filteredAthletes.map((athlete) => (
-          <div key={athlete.id} onClick={() => onSelectAthlete(athlete)} className="bg-surface-low p-4 rounded-3xl border border-white/5 flex items-center gap-6 group hover:bg-surface-high transition-all cursor-pointer">
-            <div className="w-24 h-24 rounded-2xl overflow-hidden border border-white/10">
+          <div key={athlete.id} onClick={() => onSelectAthlete(athlete)} className="bg-surface-low p-3 sm:p-4 rounded-3xl border border-white/5 flex items-center gap-3 sm:gap-6 group hover:bg-surface-high transition-all cursor-pointer">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 rounded-2xl overflow-hidden border border-white/10">
               <img src={athlete.image} alt={athlete.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             </div>
-            <div className="flex-1">
-              <div className="flex justify-between items-start">
-                <div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-start gap-2">
+                <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-[8px] font-black text-primary uppercase">{athlete.category}</span>
                     <span className="text-[8px] text-white/20">•</span>
                     <span className="text-[8px] font-bold text-on-surface-variant uppercase">{athlete.position}</span>
                   </div>
-                  <h4 className="text-xl font-black text-white uppercase italic leading-none">{athlete.name}<br/><span className="opacity-40">{athlete.lastName}</span></h4>
+                  <h4 className="text-lg sm:text-xl font-black text-white uppercase italic leading-none break-words">{athlete.name}<br/><span className="opacity-40">{athlete.lastName}</span></h4>
                 </div>
-                <div className="text-right flex flex-col items-end">
+                <div className="shrink-0 text-right flex flex-col items-end">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${athlete.hasDvd ? 'bg-primary/10 border border-primary/20' : 'bg-error/5 border border-error/10 opacity-40'}`}>
                     {athlete.hasDvd ? (
                       <Disc className="w-6 h-6 text-primary animate-pulse-slow" />
