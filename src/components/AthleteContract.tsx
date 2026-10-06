@@ -2,15 +2,14 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Check, ExternalLink, Pencil, Plus, ScrollText, Target, Trash2, TrendingUp, Trophy } from 'lucide-react';
 import { Athlete, ContractGoal, ScoutEntry } from '../types';
-import { SCOUT_FIELDS, scoutValue } from '../scout';
+import { SCOUT_FIELDS } from '../scout';
+import { contractGoalProgress, formatNumber } from '../contract';
 import { SheetSelect } from './SheetSelect';
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
 const labelClass = 'text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant';
 const inputClass = 'h-[46px] w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 text-sm font-bold text-white outline-none transition placeholder:font-medium placeholder:text-on-surface-variant focus:border-primary';
 
-// A partir deste percentual a meta aparece como "chegando perto"
-const NEAR_PERCENT = 80;
 const MANUAL = 'manual';
 const METRIC_OPTIONS = [
   { value: MANUAL, label: 'Manual (número digitado)' },
@@ -34,9 +33,6 @@ const toDate = (value?: string) => {
 
 const formatDate = (value?: string) => toDate(value)?.toLocaleDateString('pt-BR') || '';
 
-const formatNumber = (value: number, percent?: boolean) =>
-  `${value.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}${percent ? '%' : ''}`;
-
 // Aceita vírgula ou ponto; devolve NaN quando o texto não é número
 const parseNumber = (text: string) => (text.trim() ? Number(text.trim().replace(',', '.')) : NaN);
 
@@ -44,20 +40,6 @@ const onlyNumber = (event: React.FormEvent<HTMLInputElement>) => {
   const input = event.currentTarget;
   input.value = input.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1');
 };
-
-// Data da partida do lançamento ("2026" + "03.01 às 13h00") no formato "2026-01-03"; vazio quando não dá para reconhecer
-const entryDateKey = (entry: ScoutEntry) => {
-  const date = entry.matchDate.match(/(\d{1,2})[./](\d{1,2})/);
-  return date && /^\d{4}$/.test(entry.year.trim()) ? `${entry.year.trim()}-${date[2].padStart(2, '0')}-${date[1].padStart(2, '0')}` : '';
-};
-
-interface GoalProgress {
-  value: number;
-  percent: number;
-  remaining: number;
-  status: 'done' | 'near' | 'progress';
-  isPercent: boolean;
-}
 
 interface AthleteContractProps {
   athlete: Athlete;
@@ -92,25 +74,7 @@ export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals }: Athl
   const daysLeft = end ? Math.round((end.getTime() - today.getTime()) / DAY) : null;
   const hasContract = Boolean(athlete.contractLevel || start || end || athlete.contractLink);
 
-  // Soma do scout dentro da vigência do contrato; lançamento sem data reconhecível entra na conta
-  const startKey = athlete.contractStart?.slice(0, 10) || '';
-  const endKey = athlete.contractEnd?.slice(0, 10) || '';
-  const totals: Record<string, number> = {};
-  entries.forEach((entry) => {
-    const key = entryDateKey(entry);
-    if (key && ((startKey && key < startKey) || (endKey && key > endKey))) return;
-    Object.entries(entry.stats).forEach(([stat, value]) => { totals[stat] = (totals[stat] || 0) + value; });
-  });
-
-  const progressOf = (goal: ContractGoal): GoalProgress => {
-    const field = SCOUT_FIELDS.find((item) => item.key === goal.metric);
-    const value = field ? scoutValue(field, totals) || 0 : goal.current || 0;
-    const percent = goal.target > 0 ? Math.max(0, Math.min(100, Math.round((value / goal.target) * 100))) : 0;
-    const status = goal.target > 0 && value >= goal.target ? 'done' : percent >= NEAR_PERCENT ? 'near' : 'progress';
-    return { value, percent, remaining: Math.max(0, goal.target - value), status, isPercent: Boolean(field?.percent) };
-  };
-
-  const progress = goals.map((goal) => ({ goal, ...progressOf(goal) }));
+  const progress = contractGoalProgress(athlete, entries);
   const doneCount = progress.filter((item) => item.status === 'done').length;
   const nearCount = progress.filter((item) => item.status === 'near').length;
   const overallPercent = goals.length ? Math.round(progress.reduce((total, item) => total + item.percent, 0) / goals.length) : 0;

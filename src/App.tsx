@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { MOCK_ATHLETES } from './data';
-import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, View } from './types';
+import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, TacticalMeeting, View } from './types';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
@@ -13,6 +13,8 @@ import { AthleteInfo } from './components/AthleteInfo';
 import { AthleteGames } from './components/AthleteGames';
 import { AthleteScout } from './components/AthleteScout';
 import { AthleteContract } from './components/AthleteContract';
+import { AthleteTactical } from './components/AthleteTactical';
+import { AthletePdf } from './components/AthletePdf';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
@@ -160,6 +162,7 @@ const mapAthleteRow = (a: any): Athlete => ({
   contractEnd: a.contract_end,
   contractLink: a.contract_link,
   contractGoals: a.contract_goals || [],
+  tacticalMeetings: (Array.isArray(a.tactical_meetings) ? a.tactical_meetings : []).map((m: TacticalMeeting) => ({ ...m, materials: m.materials || [] })),
   source: a.source || 'Captado',
   listType: a.list_type || 'agenciados',
 });
@@ -578,6 +581,7 @@ export default function App() {
         contractEnd: athleteData.contractEnd,
         contractLink: athleteData.contractLink,
         contractGoals: selectedAthlete?.contractGoals,
+        tacticalMeetings: selectedAthlete?.tacticalMeetings,
         notes: athleteData.notes,
         hasDvd: athleteData.hasDvd,
         dvdLink: athleteData.dvdLink,
@@ -807,6 +811,44 @@ export default function App() {
 
     setAthletes(prev => prev.map(a => (a.id === athlete.id ? { ...a, contractGoals: goals } : a)));
     setSelectedAthlete(prev => (prev && prev.id === athlete.id ? { ...prev, contractGoals: goals } : prev));
+    return true;
+  };
+
+  // Reuniões do acompanhamento tático (ícone Acompanhamento Tático do perfil): grava só a coluna tactical_meetings, fora do formulário do atleta
+  const handleSaveTacticalMeetings = async (athlete: Athlete, meetings: TacticalMeeting[]): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('editar'));
+      return false;
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(athlete.id);
+    if (hasSupabaseConfig && supabase && isUuid) {
+      const { data, error } = await supabase.from('athletes').update({ tactical_meetings: meetings }).eq('id', athlete.id).select('id');
+
+      if (error) {
+        console.error('Erro ao salvar reuniões do acompanhamento tático:', error);
+        if (error.code === RLS_VIOLATION_CODE) {
+          setNotice(notAllowedMessage('editar'));
+        } else if (error.code === MISSING_COLUMN_CODE) {
+          setNotice({
+            title: 'Acompanhamento tático não configurado',
+            message: 'O banco de dados ainda não está preparado para as reuniões do acompanhamento tático. Execute o arquivo supabase/athlete_profile_fields.sql no SQL Editor do Supabase e tente de novo.',
+          });
+        } else {
+          setNotice(errorNotice('Erro ao salvar reunião', error));
+        }
+        return false;
+      }
+
+      // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+      if (!data || data.length === 0) {
+        setNotice(notAllowedMessage('editar'));
+        return false;
+      }
+    }
+
+    setAthletes(prev => prev.map(a => (a.id === athlete.id ? { ...a, tacticalMeetings: meetings } : a)));
+    setSelectedAthlete(prev => (prev && prev.id === athlete.id ? { ...prev, tacticalMeetings: meetings } : prev));
     return true;
   };
 
@@ -1139,9 +1181,9 @@ export default function App() {
                       <button
                         key={key}
                         type="button"
-                        // Clicar de novo no ícone aberto (Calendário, Scout ou Contrato) volta para as informações do perfil
-                        onClick={() => setProfileDetailView(prev => (['calendar', 'stats', 'contract'].includes(key) && prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
-                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${['calendar', 'stats', 'contract'].includes(key) && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
+                        // Clicar de novo no ícone aberto volta para as informações do perfil
+                        onClick={() => setProfileDetailView(prev => (prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
+                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >
@@ -1159,8 +1201,8 @@ export default function App() {
                 onChange={handleAthleteImageChange}
                 className="hidden"
               />
-              {/* Com Calendário, Scout ou Contrato aberto, o botão leva de volta às informações do atleta */}
-              {profileDetailView && ['calendar', 'stats', 'contract'].includes(profileDetailView) && (
+              {/* Com um dos cinco ícones aberto, o botão leva de volta às informações do atleta */}
+              {profileDetailView && (
                 <button
                   type="button"
                   onClick={() => setProfileDetailView(null)}
@@ -1174,6 +1216,12 @@ export default function App() {
                 <AthleteGames athlete={selectedAthlete} games={games} />
               ) : profileDetailView === 'stats' ? (
                 <AthleteScout entries={scoutEntriesOf(selectedAthlete)} />
+              ) : profileDetailView === 'tactical' ? (
+                <AthleteTactical
+                  athlete={selectedAthlete}
+                  isAdmin={isAdmin}
+                  onSaveMeetings={(meetings) => handleSaveTacticalMeetings(selectedAthlete, meetings)}
+                />
               ) : profileDetailView === 'contract' ? (
                 <AthleteContract
                   athlete={selectedAthlete}
@@ -1181,6 +1229,8 @@ export default function App() {
                   isAdmin={isAdmin}
                   onSaveGoals={(goals) => handleSaveContractGoals(selectedAthlete, goals)}
                 />
+              ) : profileDetailView === 'pdf' ? (
+                <AthletePdf athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} games={games} />
               ) : (
                 <AthleteInfo athlete={selectedAthlete} />
               )}

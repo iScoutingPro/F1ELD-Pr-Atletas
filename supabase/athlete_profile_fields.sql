@@ -29,6 +29,7 @@ alter table public.athletes
   add column if not exists contract_end date,
   add column if not exists contract_link text,
   add column if not exists contract_goals jsonb,
+  add column if not exists tactical_meetings jsonb,
   add column if not exists notes text,
   add column if not exists has_dvd boolean,
   add column if not exists dvd_link text,

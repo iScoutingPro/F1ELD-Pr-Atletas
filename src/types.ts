@@ -34,6 +34,7 @@ export interface Athlete {
   contractEnd?: string;
   contractLink?: string;
   contractGoals?: ContractGoal[];
+  tacticalMeetings?: TacticalMeeting[];
   notes?: string;
   hasDvd?: boolean;
   dvdLink?: string;
@@ -55,6 +56,26 @@ export interface ContractGoal {
   target: number;
   // Só nas metas manuais
   current?: number;
+}
+
+// Vídeo ou PDF de uma reunião de acompanhamento tático; guardado como link, não há upload de arquivo
+export interface TacticalMaterial {
+  id: string;
+  type: 'video' | 'pdf';
+  title: string;
+  url: string;
+}
+
+// Reunião da consultoria tática do atleta (ícone Acompanhamento Tático do perfil); agendada ou realizada conforme a data
+export interface TacticalMeeting {
+  id: string;
+  // AAAA-MM-DD
+  date: string;
+  // HH:MM
+  time?: string;
+  title: string;
+  notes?: string;
+  materials: TacticalMaterial[];
 }
 
 export interface Game {
