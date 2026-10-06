@@ -1,12 +1,21 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Users, TrendingUp, ShieldCheck, FileText, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, Bell, ArrowUpRight, CheckCheck, Trash2 } from 'lucide-react';
+import { Users, UserCheck, Handshake, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, ArrowUpRight, CheckCheck, Trash2 } from 'lucide-react';
 import { Athlete, Game, ScoutEntry, View } from '../types';
 import { scoutMonthKey } from '../scout';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
 
 const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
+
+// Mesmo padrão visual do resumo da aba Scout (ScoutOverview): painel em degradê com fio de luz no topo, quadro de ícone e linhas internas
+const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
+const topLineClass = 'pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent';
+const labelClass = 'text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant';
+const titleClass = 'mt-2 text-xl font-black uppercase italic leading-none tracking-tight text-white sm:text-2xl';
+const iconFrameClass = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white';
+const rowClass = 'rounded-2xl border border-white/10 bg-white/[0.03]';
+const emptyClass = `${rowClass} p-5 text-center text-[11px] text-on-surface-variant`;
 
 interface DashboardViewProps {
   athletes: Athlete[];
@@ -110,10 +119,53 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
   });
   const chartTotal = chartData.reduce((acc, item) => acc + item.field + item.cosmopolitano, 0);
   const chartMax = Math.max(1, ...chartData.map(item => Math.max(item.field, item.cosmopolitano)));
+  // Atletas relacionados em cada mês do gráfico, por lista: quem tem scout lançado no mês, cada atleta contado uma vez, e as convocações (um atleta numa partida)
+  const calledByMonth = chartData.map(() => ({ field: new Set<string>(), cosmopolitano: new Set<string>(), games: 0 }));
+  scoutEntries.forEach(entry => {
+    const athlete = athletesById.get(entry.athleteId);
+    const called = calledByMonth[chartData.findIndex(item => item.key === scoutMonthKey(entry))];
+    if (!athlete || !called) return;
+    called[athlete.listType === 'negociados' ? 'cosmopolitano' : 'field'].add(athlete.id);
+    called.games += 1;
+  });
+  const calledMax = Math.max(1, ...calledByMonth.map(month => Math.max(month.field.size, month.cosmopolitano.size)));
+  // No período, atleta relacionado em mais de um mês conta uma vez só
+  const calledBySeries = {
+    field: new Set(calledByMonth.flatMap(month => [...month.field])).size,
+    cosmopolitano: new Set(calledByMonth.flatMap(month => [...month.cosmopolitano])).size,
+  };
+  const calledTotal = calledBySeries.field + calledBySeries.cosmopolitano;
+  const minutesBySeries = {
+    field: chartData.reduce((acc, item) => acc + item.field, 0),
+    cosmopolitano: chartData.reduce((acc, item) => acc + item.cosmopolitano, 0),
+  };
+  // Tons de cinza, como no resto do app: claro para F1eld e médio para Cosmopolitano
   const chartSeries = [
-    { key: 'field' as const, label: 'F1eld (Agenciados)', barClass: 'bg-primary' },
-    { key: 'cosmopolitano' as const, label: 'Cosmopolitano (Negociados)', barClass: 'bg-primary/35' },
+    { key: 'field' as const, label: 'F1eld (Agenciados)', barClass: 'bg-gradient-to-t from-zinc-300 to-white' },
+    { key: 'cosmopolitano' as const, label: 'Cosmopolitano (Negociados)', barClass: 'bg-gradient-to-t from-zinc-600 to-zinc-400' },
   ];
+  // Legenda dos dois gráficos: o valor de cada lista, o total somando as duas e, se houver, uma linha a mais
+  const seriesLegend = (values: Record<'field' | 'cosmopolitano', number>, extra?: { label: string; value: number }) => (
+    <div className="min-w-[13.5rem] space-y-1.5">
+      {chartSeries.map((series) => (
+        <p key={series.key} className="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+          <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${series.barClass}`} />
+          <span>{series.label}</span>
+          <span className="ml-auto pl-3 text-xs font-black text-white">{values[series.key].toLocaleString('pt-BR')}</span>
+        </p>
+      ))}
+      <p className="flex items-center gap-2 border-t border-white/10 pt-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white">
+        <span>Total</span>
+        <span className="ml-auto pl-3 text-xs">{(values.field + values.cosmopolitano).toLocaleString('pt-BR')}</span>
+      </p>
+      {extra && (
+        <p className="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+          <span>{extra.label}</span>
+          <span className="ml-auto pl-3 text-xs font-black text-white">{extra.value.toLocaleString('pt-BR')}</span>
+        </p>
+      )}
+    </div>
+  );
 
   // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
   const [readIds, setReadIds] = React.useState<string[]>(() => loadIds(READ_NOTIFICATIONS_KEY));
@@ -207,8 +259,8 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
   const topMinutes = featuredAthletes[0]?.minutes || 1;
 
   const statCards = [
-    { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: Users, clickable: true, useLogo: true, targetView: 'athletes' as View },
-    { label: 'Atletas Negociados', val: negociadosCount.toString(), icon: TrendingUp, clickable: true, useBrand: true, targetView: 'negociados' as View },
+    { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: UserCheck, clickable: true, useLogo: true, targetView: 'athletes' as View },
+    { label: 'Atletas Negociados', val: negociadosCount.toString(), icon: Handshake, clickable: true, useBrand: true, targetView: 'negociados' as View },
     { label: 'Atletas Totais', val: totalPeopleCount.toString(), icon: Users, clickable: true, usePeople: true, targetView: 'atletas-totais' as View }
   ];
 
@@ -228,8 +280,9 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
     <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10">
       <section hidden={showNotifications} className="-order-2 grid grid-cols-3 gap-2 sm:gap-4">
         {statCards.map((stat, i) => (
-          <div 
-            key={i} 
+          <button
+            key={i}
+            type="button"
             onClick={() => {
               if (onNavigate) {
                 onNavigate(stat.targetView);
@@ -239,11 +292,14 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
                 onAthletesClick();
               }
             }}
-            className={`bg-surface-low p-3 sm:p-5 rounded-2xl border border-white/5 relative overflow-hidden group transition-all cursor-pointer hover:bg-surface-high hover:border-primary/30`}
+            className={`${panelClass} group relative overflow-hidden p-3 text-left transition hover:border-white/25 hover:bg-white/[0.06] sm:px-5 sm:py-4`}
           >
-            <div className="absolute -right-4 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <div className={topLineClass} />
+            <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-white/[0.07] blur-2xl" />
+            {/* Marca da lista apagada ao fundo */}
+            <div className="pointer-events-none absolute -right-4 -top-2 opacity-5 transition-opacity group-hover:opacity-10 sm:bottom-3 sm:right-3 sm:top-auto">
               {stat.useBrand ? (
-                <div className="flex items-center justify-center pr-6 translate-y-1.5">
+                <div className="flex items-center justify-center pr-6 translate-y-1.5 sm:pr-0">
                   <img
                     src="/assets/cosmopolitano.png"
                     alt="Cosmopolitano"
@@ -263,67 +319,66 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
                 <div className="translate-y-1.5">
                   <Logo variant="minimal" className="w-24 h-12" />
                 </div>
-              ) : stat.usePeople ? (
-                <div className="absolute right-2 top-2 opacity-40">
-                  <Users className="w-16 h-16 text-white/80" />
-                </div>
               ) : (
-                stat.icon && <stat.icon className="w-16 h-16" />
+                <Users className="h-16 w-16 text-white/80" />
               )}
             </div>
-            <div className="relative z-10">
-              <div className="text-3xl font-black tracking-tighter text-white italic leading-none mb-1.5 sm:mb-1">{stat.val}</div>
-              <div className="text-[8px] font-black uppercase leading-tight tracking-[0.06em] sm:tracking-[0.2em] text-on-surface-variant">{stat.label}</div>
+            {/* No celular os três cards ficam estreitos: sem o quadro do ícone, só o número e o nome */}
+            <div className="relative flex items-center gap-3 max-sm:hidden">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white transition group-hover:border-primary group-hover:bg-primary group-hover:text-background">
+                <stat.icon className="h-4 w-4" />
+              </span>
+              <p className={labelClass}>{stat.label}</p>
+              <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-on-surface-variant opacity-0 transition group-hover:opacity-100" />
             </div>
-          </div>
+            <p className="relative text-3xl font-black italic leading-none tracking-tight text-white sm:mt-3 sm:text-4xl">{stat.val}</p>
+            <p className="relative mt-1.5 text-[8px] font-black uppercase leading-tight tracking-[0.06em] text-on-surface-variant sm:hidden">{stat.label}</p>
+          </button>
         ))}
       </section>
 
       {/* max-sm:contents: no celular os dois blocos entram direto na ordem da página (notificações logo abaixo do sino) */}
       <section className={`grid grid-cols-1 gap-5 max-sm:contents ${showNotifications ? '' : 'sm:mt-6'}`}>
         <div hidden={showNotifications} className="space-y-3 max-sm:order-3 max-sm:mt-3 sm:space-y-5 xl:grid xl:grid-cols-2 xl:gap-5 xl:space-y-0">
-          <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
-            <div className="flex items-center justify-between mb-4">
+          <div className={`${panelClass} relative overflow-hidden p-4 sm:p-6`}>
+            <div className={topLineClass} />
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Destaque</p>
-                <h3 className="text-xl sm:text-[1.7rem] font-black text-white italic uppercase mt-1 leading-none">Top 5</h3>
+                <p className={labelClass}>Destaque · minutagem</p>
+                <h3 className={titleClass}>Top 5</h3>
               </div>
-              <div className="p-2 rounded-xl bg-surface-high">
-                <Trophy className="w-4 h-4 text-primary" />
-              </div>
+              <span className={iconFrameClass}>
+                <Trophy className="h-[18px] w-[18px]" />
+              </span>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {featuredAthletes.length === 0 && (
-                <p className="rounded-2xl border border-white/10 bg-surface-high p-4 text-center text-[11px] text-on-surface-variant">
+                <p className={emptyClass}>
                   Nenhuma minutagem cadastrada ainda. Lance a minutagem de cada atleta na aba Scout.
                 </p>
               )}
               {featuredAthletes.map((athlete, index) => (
-                <div key={athlete.id} className="rounded-2xl border border-white/5 bg-surface-high p-3">
+                <div key={athlete.id} className={`${rowClass} p-3`}>
                   <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <img src={athlete.image} alt={athlete.name} className="w-11 h-11 rounded-xl object-cover" referrerPolicy="no-referrer" />
-                      <div className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[8px] font-black text-black">{index + 1}</div>
-                    </div>
+                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black ${index === 0 ? 'border-primary bg-primary text-background' : 'border-white/15 bg-white/[0.04] text-on-surface-variant'}`}>{index + 1}</span>
+                    <img src={athlete.image} alt={athlete.name} className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/15" referrerPolicy="no-referrer" />
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-black text-white uppercase italic truncate">{athlete.name} {athlete.lastName}</p>
-                        <span className="text-[9px] font-black text-primary uppercase tracking-widest">{athlete.rating}</span>
-                      </div>
-                      <div className="mt-1 flex items-center justify-between gap-2 text-[8px] font-bold uppercase tracking-widest text-on-surface-variant">
-                        <span>{athlete.position}</span>
-                        <span className="flex items-center gap-1"><Clock3 className="w-3 h-3" /> {athlete.minutes.toLocaleString('pt-BR')} min</span>
-                      </div>
+                      <p className="truncate text-sm font-black uppercase italic text-white">{athlete.name} {athlete.lastName}</p>
+                      <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">{[athlete.position, athlete.category].filter(Boolean).join(' · ')}</p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xl font-black italic leading-none text-white">{athlete.minutes.toLocaleString('pt-BR')}</p>
+                      <p className="mt-1 text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">min</p>
                     </div>
                   </div>
 
-                  <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-lowest">
+                  <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${(athlete.minutes / topMinutes) * 100}%` }}
                       transition={{ duration: 0.8, delay: index * 0.1 }}
-                      className="h-full rounded-full bg-gradient-to-r from-primary to-primary/55"
+                      className={`h-full rounded-full ${index === 0 ? 'bg-gradient-to-r from-zinc-300 to-white' : 'bg-white/50'}`}
                     />
                   </div>
                 </div>
@@ -331,33 +386,36 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
             </div>
           </div>
 
-          <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
-            <div className="flex items-center justify-between mb-4">
+          <div className={`${panelClass} relative overflow-hidden p-4 sm:p-6`}>
+            <div className={topLineClass} />
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-xl sm:text-[1.7rem] font-black text-white italic uppercase leading-none">Atleta por categoria</h3>
+                <p className={labelClass}>{totalPeopleCount} {totalPeopleCount === 1 ? 'atleta' : 'atletas'}</p>
+                <h3 className={titleClass}>Atleta por categoria</h3>
               </div>
-              <div className="p-2 rounded-xl bg-surface-high">
-                <Star className="w-4 h-4 text-primary" />
-              </div>
+              <span className={iconFrameClass}>
+                <Star className="h-[18px] w-[18px]" />
+              </span>
             </div>
 
             {/* No celular cada categoria vira um quadro (número em cima, nome embaixo), três por linha, sem a barra */}
-            <div className="max-sm:grid max-sm:grid-cols-3 max-sm:gap-2 sm:space-y-4">
+            <div className="max-sm:grid max-sm:grid-cols-3 max-sm:gap-2 sm:space-y-3.5">
               {categoryBreakdown.map((item) => {
                 const percentage = (item.count / Math.max(totalPeopleCount, 1)) * 100;
                 return (
-                  <div key={item.label} className="max-sm:rounded-xl max-sm:border max-sm:border-white/5 max-sm:bg-surface-high max-sm:px-1 max-sm:py-2.5">
-                    <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant max-sm:flex-col-reverse max-sm:gap-1 max-sm:text-[8px] max-sm:tracking-normal sm:mb-1">
-                      <span>{item.label}</span>
-                      <span className={`max-sm:text-xl max-sm:italic max-sm:leading-none ${item.count > 0 ? 'max-sm:text-white' : 'max-sm:text-white/25'}`}>{item.count}</span>
-                    </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-surface-highest max-sm:hidden">
+                  <div key={item.label} className="max-sm:rounded-xl max-sm:border max-sm:border-white/10 max-sm:bg-white/[0.03] max-sm:px-1 max-sm:py-2.5 sm:grid sm:grid-cols-[6.5rem_1fr_2.5rem] sm:items-center sm:gap-3">
+                    <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-on-surface-variant max-sm:hidden">{item.label}</span>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 max-sm:hidden">
                       <motion.div
                         initial={{ width: 0 }}
                         animate={{ width: `${percentage}%` }}
                         transition={{ duration: 0.8 }}
-                        className="h-full rounded-full bg-gradient-to-r from-primary to-primary/60"
+                        className="h-full rounded-full bg-gradient-to-r from-zinc-400 to-white"
                       />
+                    </div>
+                    <div className="flex items-center justify-end text-[9px] font-black uppercase text-on-surface-variant max-sm:flex-col-reverse max-sm:justify-between max-sm:gap-1 max-sm:text-[8px]">
+                      <span className="sm:hidden">{item.label}</span>
+                      <span className={`text-base italic leading-none max-sm:text-xl ${item.count > 0 ? 'text-white' : 'text-white/25'}`}>{item.count}</span>
                     </div>
                   </div>
                 );
@@ -366,43 +424,44 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
           </div>
         </div>
 
-        <aside hidden={!showNotifications} className="rounded-[1.75rem] border border-white/10 bg-surface-low p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+        <aside hidden={!showNotifications} className={`${panelClass} relative overflow-hidden p-4 sm:p-6`}>
+          <div className={topLineClass} />
           {/* No celular o título e os botões encolhem para caber na mesma linha; se ainda assim não couber, os botões descem alinhados à direita */}
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-2 gap-y-3 sm:gap-x-3">
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-x-2 gap-y-3 sm:gap-x-3">
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant max-sm:tracking-[0.2em]">Atualizações</p>
-              <h3 className="mt-2 text-base sm:text-[1.5rem] font-black uppercase italic leading-none text-white">Notificações</h3>
+              <p className={`${labelClass} max-sm:tracking-[0.16em]`}>Atualizações</p>
+              <h3 className="mt-2 text-base font-black uppercase italic leading-none tracking-tight text-white sm:text-2xl">Notificações</h3>
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-              <div className="flex h-8 min-w-[2rem] items-center justify-center rounded-full border border-primary/30 bg-primary/10 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-primary sm:h-9 sm:min-w-[2.25rem]">
+              <div className="flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-primary px-2 text-[10px] font-black uppercase tracking-[0.18em] text-background sm:h-10 sm:min-w-[2.5rem]">
                 {unreadCount}
               </div>
               <button
                 type="button"
                 onClick={handleMarkAllAsRead}
-                className="flex h-8 w-8 items-center justify-center rounded-xl bg-surface-high border border-white/10 hover:border-primary/30 transition sm:h-10 sm:w-10 sm:rounded-2xl"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white transition hover:bg-white/10 sm:h-10 sm:w-10"
                 aria-label="Marcar notificações como lidas"
               >
-                <CheckCheck className="h-4 w-4 text-primary" />
+                <CheckCheck className="h-4 w-4" />
               </button>
               {notifications.length > 0 && (
                 <button
                   type="button"
                   onClick={handleClearNotifications}
-                  className="flex h-8 w-8 items-center justify-center gap-2 rounded-xl border border-white/10 bg-surface-high text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary/30 sm:h-10 sm:w-auto sm:rounded-2xl sm:px-3"
+                  className="flex h-8 w-8 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.04] text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-white/10 sm:h-10 sm:w-auto sm:px-3.5"
                   aria-label="Limpar notificações"
                   title="Limpar notificações"
                 >
-                  <Trash2 className="h-4 w-4 text-primary" />
+                  <Trash2 className="h-4 w-4" />
                   <span className="max-sm:hidden">Limpar</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2.5">
             {notifications.length === 0 && (
-              <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
+              <p className={emptyClass}>
                 Nenhuma notificação ainda.
               </p>
             )}
@@ -411,10 +470,10 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
                 key={notification.id}
                 type="button"
                 onClick={() => handleOpenNotification(notification)}
-                className={`w-full rounded-2xl border p-3 text-left transition ${
+                className={`w-full rounded-2xl border p-3.5 text-left transition ${
                   notification.isRead
-                    ? 'border-white/10 bg-[#1d1f23] hover:border-primary/35 hover:bg-[#212427]'
-                    : 'border-primary/25 bg-primary/[0.06] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)] hover:border-primary/40'
+                    ? 'border-white/10 bg-white/[0.03] hover:border-white/25 hover:bg-white/[0.06]'
+                    : 'border-white/30 bg-white/[0.07] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-white/50'
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
@@ -423,16 +482,16 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
                       <span className={`h-2.5 w-2.5 rounded-full ${notification.accent.replace('text-primary', 'bg-primary').replace('text-green-400', 'bg-green-400').replace('text-yellow-300', 'bg-yellow-300').replace('text-violet-300', 'bg-violet-300')}`} />
                       <p className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-white">{notification.title}</p>
                     </div>
-                    <p className="mt-2 text-xs font-black uppercase tracking-[0.16em] text-on-surface-variant">
+                    <p className="mt-2 text-sm font-black uppercase italic text-white">
                       {notification.athleteName}
                     </p>
-                    <p className="mt-2 text-[11px] leading-relaxed text-white/70">{notification.description}</p>
+                    <p className="mt-1.5 text-[11px] leading-relaxed text-white/70">{notification.description}</p>
                   </div>
                   <ArrowUpRight className="mt-0.5 h-4 w-4 shrink-0 text-on-surface-variant" />
                 </div>
-                <div className="mt-3 flex items-center justify-between text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
+                <div className="mt-3 flex items-center justify-between text-[9px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
                   <span>{notification.time}</span>
-                  <span className={notification.isRead ? 'text-on-surface-variant' : 'text-primary'}>
+                  <span className={notification.isRead ? '' : 'rounded-full bg-primary px-2 py-0.5 text-background'}>
                     {notification.isRead ? 'Lida' : 'Nova'}
                   </span>
                 </div>
@@ -443,114 +502,186 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
       </section>
 
       <section hidden={showNotifications} className="mt-3 max-sm:order-4 sm:mt-5">
-        <div className="bg-surface-low p-4 sm:p-5 rounded-[1.75rem] border border-white/5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Performance</p>
-              <h3 className="break-words text-xl sm:text-[1.7rem] font-black text-white italic uppercase leading-none">Minutagem Atletas F1eld/Cosmopolitano</h3>
-            </div>
-            <div className="flex shrink-0 items-center gap-2 bg-surface-high px-3 py-2 rounded-xl">
-              <Clock3 className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-primary">{chartTotal.toLocaleString('pt-BR')} min</span>
-            </div>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 px-2">
-            {chartSeries.map((series) => (
-              <span key={series.key} className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
-                <span className={`h-2.5 w-2.5 rounded-sm ${series.barClass}`} />
-                {series.label}
-              </span>
-            ))}
-            <span className="ml-auto text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">Últimos 6 meses</span>
-          </div>
-
-          {chartTotal === 0 ? (
-            <p className="rounded-2xl border border-white/10 bg-surface-high p-6 text-center text-[11px] text-on-surface-variant">
-              Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.
-            </p>
-          ) : (
-            <div className="flex items-end gap-1.5 sm:gap-3 sm:px-2">
-              {chartData.map((item, index) => (
-                <div key={item.key} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="flex h-36 w-full items-end justify-center gap-1">
-                    {chartSeries.map((series) => (
-                      <motion.div
-                        key={series.key}
-                        initial={{ height: 0 }}
-                        animate={{ height: `${(item[series.key] / chartMax) * 100}%` }}
-                        transition={{ duration: 0.7, delay: index * 0.08 }}
-                        title={`${series.label}: ${item[series.key].toLocaleString('pt-BR')} min`}
-                        className={`w-full max-w-10 rounded-t-xl ${series.barClass}`}
-                      />
-                    ))}
+        <div>
+          {/* Dois painéis lado a lado, cada um completo (título, número do período, legenda e colunas), para não misturar minutos com atletas */}
+          <div className="grid gap-3 sm:gap-5 xl:grid-cols-2">
+            {/* Minutagem por mês, separada por lista */}
+            <div className={`${panelClass} relative min-w-0 overflow-hidden p-4 sm:p-6`}>
+              <div className={topLineClass} />
+              <div className="mb-5 min-w-0">
+                <p className={labelClass}>Performance · últimos 6 meses</p>
+                <h3 className={`${titleClass} break-words`}>Minutagem Atletas F1eld/Cosmopolitano</h3>
+              </div>
+              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                <div className="flex items-center gap-3">
+                  <span className={iconFrameClass}>
+                    <Clock3 className="h-[18px] w-[18px]" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Total do período</p>
+                    <p className="mt-1.5 text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">
+                      {chartTotal.toLocaleString('pt-BR')} <span className="text-sm not-italic text-on-surface-variant">min</span>
+                    </p>
                   </div>
-                  <span className="text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant">{item.label}</span>
-                  <span className="text-[10px] font-black text-white">{(item.field + item.cosmopolitano).toLocaleString('pt-BR')}<span className="hidden sm:inline"> min</span></span>
                 </div>
-              ))}
+                {seriesLegend(minutesBySeries)}
+              </div>
+
+              {chartTotal === 0 ? (
+                <p className="mt-6 text-sm text-white/70">Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.</p>
+              ) : (
+                <div className="relative mt-6 flex gap-1.5 sm:gap-3">
+                  {/* Linhas de referência atrás das colunas */}
+                  <div className="pointer-events-none absolute inset-x-0 top-5 h-36">
+                    {[0, 50, 100].map((mark) => <div key={mark} className="absolute inset-x-0 border-t border-dashed border-white/[0.07]" style={{ top: `${mark}%` }} />)}
+                  </div>
+                  {chartData.map((item, index) => {
+                    const monthTotal = item.field + item.cosmopolitano;
+                    return (
+                      <div key={item.key} className="relative flex min-w-0 flex-1 flex-col items-center">
+                        <span className={`h-5 text-xs font-black leading-none ${monthTotal > 0 ? 'text-white' : 'text-white/25'}`}>{monthTotal.toLocaleString('pt-BR')}</span>
+                        <div className="flex h-36 w-full items-end justify-center gap-1 border-b border-white/15">
+                          {chartSeries.map((series) => (
+                            <motion.div
+                              key={series.key}
+                              initial={{ height: 0 }}
+                              animate={{ height: `${(item[series.key] / chartMax) * 100}%` }}
+                              transition={{ duration: 0.7, delay: index * 0.08 }}
+                              title={`${series.label}: ${item[series.key].toLocaleString('pt-BR')} min`}
+                              className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
+                            />
+                          ))}
+                        </div>
+                        <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.16em] ${monthTotal > 0 ? 'text-white' : 'text-on-surface-variant'}`}>{item.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Atletas relacionados por mês (o mesmo número da aba Scout): atletas com scout lançado no mês, cada um contado uma vez */}
+            <div className={`${panelClass} relative min-w-0 overflow-hidden p-4 sm:p-6`}>
+              <div className={topLineClass} />
+              <div className="mb-5 min-w-0">
+                <p className={labelClass}>Convocações · últimos 6 meses</p>
+                <h3 className={`${titleClass} break-words`}>Atletas Relacionados F1eld/Cosmopolitano</h3>
+              </div>
+              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+                <div className="flex items-center gap-3">
+                  <span className={iconFrameClass}>
+                    <Users className="h-[18px] w-[18px]" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Total do período</p>
+                    <p className="mt-1.5 text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">
+                      {calledTotal} <span className="text-sm not-italic text-on-surface-variant">{calledTotal === 1 ? 'atleta' : 'atletas'}</span>
+                    </p>
+                  </div>
+                </div>
+                {seriesLegend(calledBySeries)}
+              </div>
+
+              {calledTotal === 0 ? (
+                <p className="mt-6 text-sm text-white/70">Nenhum scout lançado nos últimos 6 meses.</p>
+              ) : (
+                <div className="relative mt-6 flex gap-1.5 sm:gap-3">
+                  <div className="pointer-events-none absolute inset-x-0 top-5 h-36">
+                    {[0, 50, 100].map((mark) => <div key={mark} className="absolute inset-x-0 border-t border-dashed border-white/[0.07]" style={{ top: `${mark}%` }} />)}
+                  </div>
+                  {chartData.map((item, index) => {
+                    const called = calledByMonth[index];
+                    const count = called.field.size + called.cosmopolitano.size;
+                    return (
+                      <div
+                        key={item.key}
+                        className="relative flex min-w-0 flex-1 flex-col items-center"
+                        title={`${item.label}: ${count} ${count === 1 ? 'atleta relacionado' : 'atletas relacionados'} em ${called.games} ${called.games === 1 ? 'convocação' : 'convocações'}`}
+                      >
+                        <span className={`h-5 text-xs font-black leading-none ${count > 0 ? 'text-white' : 'text-white/25'}`}>{count}</span>
+                        <div className="flex h-36 w-full items-end justify-center gap-1 border-b border-white/15">
+                          {chartSeries.map((series) => (
+                            <motion.div
+                              key={series.key}
+                              initial={{ height: 0 }}
+                              animate={{ height: `${(called[series.key].size / calledMax) * 100}%` }}
+                              transition={{ duration: 0.7, delay: index * 0.08 }}
+                              title={`${series.label}: ${called[series.key].size}`}
+                              className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
+                            />
+                          ))}
+                        </div>
+                        <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.16em] ${count > 0 ? 'text-white' : 'text-on-surface-variant'}`}>{item.label}</span>
+                        <span className="mt-1 truncate text-[9px] font-bold leading-none text-on-surface-variant">{called.games} conv.</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
       {/* A pedido do usuário, "Próximos jogos" vem logo abaixo das contagens (-order-2 e -order-1), em qualquer tela */}
       <section hidden={showNotifications} className="-order-1 mt-3 sm:mt-6">
-        <div className="rounded-[1.75rem] border border-white/10 bg-surface-low p-4 sm:p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
-          <div className="mb-4 flex items-center justify-between gap-3">
+        <div className={`${panelClass} relative overflow-hidden p-4 sm:p-6`}>
+          <div className={topLineClass} />
+          <div className="mb-5 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-on-surface-variant">Próximos jogos</p>
-              <h3 className="mt-1 text-xl sm:text-[1.4rem] font-black uppercase italic leading-none text-white">Agenda</h3>
+              <p className={labelClass}>Próximos jogos</p>
+              <h3 className={titleClass}>Agenda</h3>
             </div>
 
             <button
               type="button"
               onClick={() => onNavigate?.('calendar')}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-surface-high px-3 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary transition hover:border-primary/40 hover:bg-primary/10"
+              className="inline-flex shrink-0 items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.02]"
             >
               Ver calendário
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {upcomingGames.length === 0 && (
-              <p className="rounded-2xl border border-white/10 bg-[#1d1f23] p-4 text-center text-[11px] text-on-surface-variant">
+              <p className={emptyClass}>
                 Nenhum próximo jogo cadastrado no Calendário.
               </p>
             )}
-            {upcomingGames.map((game) => (
+            {upcomingGames.map((game, index) => (
               <button
                 key={game.id}
                 type="button"
                 onClick={() => onNavigate?.('calendar')}
-                className="flex w-full flex-col gap-3 rounded-2xl border border-white/10 bg-[#1d1f23] p-3 text-left transition hover:border-primary/40 hover:bg-[#212427] sm:flex-row sm:items-center"
+                className={`${rowClass} flex w-full flex-col gap-3 p-3 text-left transition hover:border-white/25 hover:bg-white/[0.06] sm:flex-row sm:items-center sm:p-3.5`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border border-white/10 bg-surface-high text-center">
-                    <span className="text-lg font-black leading-none text-white">{game.day}</span>
-                    <span className="text-[7px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{game.month}</span>
+                  {/* O jogo mais próximo tem o quadro da data em branco */}
+                  <div className={`flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl border text-center ${index === 0 ? 'border-primary bg-primary text-background' : 'border-white/15 bg-white/[0.04] text-white'}`}>
+                    <span className="text-xl font-black italic leading-none">{game.day}</span>
+                    <span className={`mt-0.5 text-[8px] font-black uppercase tracking-[0.18em] ${index === 0 ? 'text-background/70' : 'text-on-surface-variant'}`}>{game.month}</span>
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-primary">
-                      <CalendarDays className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] text-white">
+                      <CalendarDays className="h-3.5 w-3.5 shrink-0" />
                       <span>{game.time || '--:--'}</span>
                       {game.competition && <span className="min-w-0 break-words text-on-surface-variant">· {game.competition}</span>}
                     </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm font-black uppercase italic text-white">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm font-black uppercase italic text-white sm:text-base">
                       <span className="break-words">{game.home}</span>
-                      <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-on-surface-variant">VS</span>
+                      <span className="rounded-full border border-white/15 bg-white/[0.04] px-1.5 py-0.5 text-[9px] not-italic text-on-surface-variant">VS</span>
                       <span className="break-words">{game.away}</span>
                     </div>
                     {(game.category || game.venue) && (
-                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[8px] font-black uppercase tracking-[0.16em] text-on-surface-variant">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
                         {game.category && (
-                          <span className="rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[7px] text-primary">{game.category}</span>
+                          <span className="rounded-full border border-white/15 bg-white/[0.04] px-2 py-0.5 text-[8px] text-white">{game.category}</span>
                         )}
                         {game.venue && (
                           <>
-                            <MapPin className="h-3 w-3 shrink-0 text-primary" />
+                            <MapPin className="h-3 w-3 shrink-0" />
                             <span className="break-words">{game.venue}</span>
                           </>
                         )}
@@ -559,16 +690,16 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
                   </div>
                 </div>
 
-                <div className="border-t border-white/10 pt-2 sm:min-w-[110px] sm:max-w-[160px] sm:border-0 sm:pt-0 sm:text-right">
-                  <p className="text-[8px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
+                <div className="border-t border-white/10 pt-2 sm:min-w-[110px] sm:max-w-[180px] sm:border-0 sm:pt-0 sm:text-right">
+                  <p className="text-[9px] font-black uppercase tracking-[0.18em] text-on-surface-variant">
                     {game.athleteNames.length === 1 ? 'Atleta' : 'Atletas'}
                   </p>
                   {game.athleteNames.length > 0 ? (
                     game.athleteNames.map((name) => (
-                      <p key={name} className="break-words text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-white">{name}</p>
+                      <p key={name} className="mt-0.5 break-words text-[11px] font-black uppercase italic leading-tight text-white">{name}</p>
                     ))
                   ) : (
-                    <p className="text-[10px] text-on-surface-variant">Nenhum vinculado</p>
+                    <p className="mt-0.5 text-[10px] text-on-surface-variant">Nenhum vinculado</p>
                   )}
                 </div>
               </button>

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ClipboardList, Minus, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { Athlete, Game, ScoutEntry, ScoutEntryInput } from '../types';
-import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, formatScoutValue, sortScoutEntries } from '../scout';
+import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, scoutValue, sortScoutEntries } from '../scout';
 import { SheetSelect, normalize } from '../components/SheetSelect';
 import { ScoutOverview } from '../components/ScoutOverview';
 
@@ -19,7 +19,61 @@ interface Column {
   kind: 'text' | 'athlete' | 'number' | 'calc';
   width: string;
   field?: ScoutField;
+  // Primeira coluna de um grupo de números: ganha a linha divisória na tabela de lançamentos
+  groupStart?: boolean;
 }
+
+// Grupos de números da tabela de lançamentos: a chave é o primeiro número de cada grupo, na ordem de SCOUT_FIELDS
+const STAT_GROUPS = new Map([
+  ['starter', 'Participação'],
+  ['goals', 'Ataque'],
+  ['actionsOk', 'Ações'],
+  ['passesCompleted', 'Passes'],
+  ['longPassesCompleted', 'Passe longo'],
+  ['shotsOnTarget', 'Finalizações'],
+  ['crossesCompleted', 'Cruzamentos'],
+  ['dribbledPast', 'Defesa'],
+  ['dribblesCompleted', 'Dribles'],
+  ['foulsCommitted', 'Disciplina'],
+  ['aerialDefWon', 'Duelos aéreos'],
+  ['offsides', 'Outros'],
+]);
+
+// Faixa de grupos do cabeçalho: nome e quantas colunas cada grupo ocupa
+const HEADER_GROUPS = SCOUT_FIELDS.reduce<{ label: string; span: number }[]>((groups, field) => {
+  const label = STAT_GROUPS.get(field.key);
+  if (label || groups.length === 0) groups.push({ label: label || '', span: 1 });
+  else groups[groups.length - 1].span += 1;
+  return groups;
+}, []);
+
+// Cor do texto de cada dado da partida na tabela de lançamentos
+const INFO_TONES: Record<string, string> = {
+  year: 'font-bold text-on-surface-variant',
+  team: 'font-bold text-white/85',
+  matchDate: 'text-white/70',
+  competition: 'text-white/70',
+  round: 'text-white/70',
+  match: 'font-bold text-white',
+};
+
+// Número do scout na tabela de lançamentos: marcação vira ponto, percentual ganha barra e o zero fica apagado
+const statCell = (field: ScoutField, stats: Record<string, number>) => {
+  const value = scoutValue(field, stats);
+  if (field.flag) return <span className={`mx-auto block h-2 w-2 rounded-full ${value ? 'bg-primary' : 'bg-white/10'}`} title={value ? field.label : undefined} />;
+  if (value === undefined) return <span className="text-white/20">–</span>;
+  if (field.percent) {
+    return (
+      <span className="inline-flex flex-col items-center gap-1.5">
+        <span className="leading-none">{value}%</span>
+        <span className="block h-[3px] w-9 overflow-hidden rounded-full bg-white/10">
+          <span className="block h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
+        </span>
+      </span>
+    );
+  }
+  return <span className={value === 0 ? 'text-white/35' : undefined}>{value}</span>;
+};
 
 const INFO_WIDTHS: Record<string, string> = {
   year: 'min-w-[6.5rem]',
@@ -37,7 +91,7 @@ const COLUMNS: Column[] = [
   ...SCOUT_INFO_FIELDS.slice(0, 1).map(infoColumn),
   { key: 'athlete', label: 'Atleta', kind: 'athlete', width: 'min-w-[15rem]' },
   ...SCOUT_INFO_FIELDS.slice(1).map(infoColumn),
-  ...SCOUT_FIELDS.map((field): Column => ({ key: field.key, label: field.label, kind: field.calc ? 'calc' : 'number', width: 'min-w-[4rem]', field })),
+  ...SCOUT_FIELDS.map((field): Column => ({ key: field.key, label: field.label, kind: field.calc ? 'calc' : 'number', width: 'min-w-[4rem]', field, groupStart: STAT_GROUPS.has(field.key) })),
 ];
 
 // A planilha de lançamento não tem os totais e percentuais: eles são calculados e aparecem só na tabela e no perfil
@@ -372,11 +426,15 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     setSelected([]);
   };
 
-  const headClass = 'whitespace-nowrap px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em]';
-  const cellClass = 'whitespace-nowrap border-t border-white/5 px-3 py-2.5 text-xs text-white/80';
+  // O cabeçalho tem duas faixas (grupos e nomes das colunas) e fica parado no topo ao rolar a tabela para baixo;
+  // a faixa de grupos tem altura fixa (h-8) porque a de nomes começa logo abaixo dela (top-8)
+  const groupHeadClass = 'sticky top-0 h-8 whitespace-nowrap border-b border-white/[0.06] bg-surface-low px-3 text-left text-[9px] font-black uppercase tracking-[0.2em] text-white';
+  const headClass = 'sticky top-8 whitespace-nowrap border-b border-white/10 bg-surface-low px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.14em]';
+  const cellClass = 'whitespace-nowrap border-b border-white/[0.06] px-3 py-3 text-xs tabular-nums';
+  const groupLineClass = 'border-l border-white/[0.08]';
   // A caixa de seleção e o nome do atleta ficam parados à esquerda ao rolar a tabela para o lado
-  const stickyClass = 'sticky left-0 z-10 sm:left-10';
-  const checkColumnClass = 'sticky left-0 z-10 w-10 min-w-10 !px-0 max-sm:hidden';
+  const stickyClass = 'sticky left-0 border-r border-white/[0.08] sm:left-10';
+  const checkColumnClass = 'sticky left-0 w-10 min-w-10 !px-0 max-sm:hidden';
   // As colunas paradas precisam de fundo sólido, igual ao da linha, para os números não aparecerem por baixo ao rolar
   const stickyBg = (isSelected: boolean) => (isSelected ? 'bg-surface-high' : 'bg-surface-low group-hover:bg-surface');
   const checkBoxClass = (on: boolean) => `mx-auto flex h-[18px] w-[18px] items-center justify-center rounded-md border transition ${on ? 'border-primary bg-primary text-background' : 'border-white/25 text-transparent hover:border-white/60'}`;
@@ -458,17 +516,31 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
             </p>
           </div>
         ) : (
-          <div className="mt-3 overflow-x-auto">
+          <div className="mt-4 overflow-auto rounded-2xl border border-white/[0.08] sm:max-h-[72vh]">
             <table className="w-full border-separate border-spacing-0 text-center">
               <thead>
                 <tr>
-                  <th className={`${headClass} ${checkColumnClass} bg-surface-low`}>
+                  <th className={`${groupHeadClass} ${checkColumnClass} z-30`} />
+                  <th className={`${groupHeadClass} z-20`} />
+                  <th className={`${groupHeadClass} ${stickyClass} z-30`} />
+                  <th colSpan={SCOUT_INFO_FIELDS.length - 1} className={`${groupHeadClass} z-20`}>Partida</th>
+                  {HEADER_GROUPS.map((group, index) => (
+                    <th key={index} colSpan={group.span} className={`${groupHeadClass} ${groupLineClass} z-20`}>{group.label}</th>
+                  ))}
+                </tr>
+                <tr>
+                  <th className={`${headClass} ${checkColumnClass} z-30`}>
                     <button type="button" onClick={toggleAll} className={checkBoxClass(allSelected)} aria-label={allSelected ? 'Limpar seleção' : 'Selecionar todos'}>
                       <Check className="h-3 w-3" strokeWidth={4} />
                     </button>
                   </th>
                   {COLUMNS.map((column) => (
-                    <th key={column.key} className={`${headClass} ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'} ${column.kind === 'athlete' ? `${stickyClass} bg-surface-low` : ''}`}>{column.label}</th>
+                    <th
+                      key={column.key}
+                      className={`${headClass} ${isTextColumn(column) ? 'text-left' : ''} ${column.kind === 'calc' ? 'text-white' : 'text-on-surface-variant'} ${column.kind === 'athlete' ? `${stickyClass} z-30` : 'z-20'} ${column.groupStart ? groupLineClass : ''}`}
+                    >
+                      {column.label}
+                    </th>
                   ))}
                 </tr>
               </thead>
@@ -477,21 +549,46 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                   const athlete = athleteById.get(entry.athleteId);
                   const isSelected = selected.includes(entry.id);
                   return (
-                    <tr key={entry.id} className={`group ${isSelected ? 'bg-surface-high' : 'hover:bg-surface'}`}>
-                      <td className={`${cellClass} ${checkColumnClass} ${stickyBg(isSelected)}`}>
+                    <tr key={entry.id} className={`group transition-colors ${isSelected ? 'bg-surface-high' : 'hover:bg-surface'}`}>
+                      <td className={`${cellClass} ${checkColumnClass} z-10 transition-colors ${stickyBg(isSelected)} ${isSelected ? 'shadow-[inset_2px_0_0_#fff]' : ''}`}>
                         <button type="button" onClick={() => toggleSelected(entry.id)} className={checkBoxClass(isSelected)} aria-label={isSelected ? 'Desmarcar lançamento' : 'Selecionar lançamento'} aria-pressed={isSelected}>
                           <Check className="h-3 w-3" strokeWidth={4} />
                         </button>
                       </td>
-                      {COLUMNS.map(({ key, kind, field }) => (
-                        <td key={key} className={`${cellClass} ${kind === 'athlete' ? `${stickyClass} ${stickyBg(isSelected)} font-black uppercase italic text-white` : ''} ${field ? 'font-black text-white' : ''}`}>
-                          {kind === 'athlete'
-                            ? (athlete ? fullName(athlete) : 'Atleta apagado')
-                            : field
-                              ? formatScoutValue(field, entry.stats)
-                              : entry[key as keyof ScoutEntry] as string}
-                        </td>
-                      ))}
+                      {COLUMNS.map(({ key, kind, field, groupStart }) => {
+                        if (kind === 'athlete') {
+                          const name = athlete ? fullName(athlete) : 'Atleta apagado';
+                          return (
+                            <td key={key} className={`${cellClass} ${stickyClass} z-10 transition-colors ${stickyBg(isSelected)}`}>
+                              <div className="flex items-center gap-3 text-left">
+                                {athlete
+                                  ? <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/15 max-sm:hidden" referrerPolicy="no-referrer" />
+                                  : <span className="h-9 w-9 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 max-sm:hidden" />}
+                                <div className="min-w-0">
+                                  <p className={`max-w-[8.5rem] truncate text-xs font-black uppercase italic sm:max-w-[16rem] ${athlete ? 'text-white' : 'text-on-surface-variant'}`} title={name}>{name}</p>
+                                  {athlete && (
+                                    <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.14em] text-on-surface-variant max-sm:hidden">
+                                      {[athlete.position, athlete.category].filter(Boolean).join(' · ')}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          );
+                        }
+                        if (field) {
+                          return (
+                            <td key={key} className={`${cellClass} text-[13px] font-black text-white ${kind === 'calc' ? 'bg-white/[0.035]' : ''} ${groupStart ? groupLineClass : ''}`}>
+                              {statCell(field, entry.stats)}
+                            </td>
+                          );
+                        }
+                        return (
+                          <td key={key} className={`${cellClass} text-left ${INFO_TONES[key] || 'text-white/70'}`}>
+                            {entry[key as keyof ScoutEntry] as string}
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
