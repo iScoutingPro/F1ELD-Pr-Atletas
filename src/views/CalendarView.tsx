@@ -288,6 +288,21 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
   const [selectedDate, setSelectedDate] = useState(todayKey);
   // null = formulário fechado; 'new' = cadastro; Game = edição
   const [formGame, setFormGame] = useState<Game | 'new' | null>(null);
+  // Lixeira do cartão do jogo: o primeiro clique pede confirmação, o segundo apaga
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleDeleteGame = async (id: string) => {
+    if (!onDeleteGame || deletingId) return;
+    if (confirmingDeleteId !== id) {
+      setConfirmingDeleteId(id);
+      return;
+    }
+    setDeletingId(id);
+    await onDeleteGame(id);
+    setDeletingId(null);
+    setConfirmingDeleteId(null);
+  };
 
   const monthDays = useMemo(() => {
     const start = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
@@ -466,6 +481,20 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                             title="Editar jogo"
                           >
                             <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                        {onDeleteGame && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteGame(game.id)}
+                            onBlur={() => setConfirmingDeleteId((current) => (current === game.id ? null : current))}
+                            disabled={deletingId === game.id}
+                            className={`flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-full border text-[8px] font-black uppercase tracking-[0.18em] transition disabled:opacity-50 ${confirmingDeleteId === game.id ? 'border-error bg-error px-2.5 text-white' : 'w-7 border-white/10 bg-white/5 text-white/75 hover:border-error/40 hover:bg-error/15 hover:text-error'}`}
+                            aria-label={confirmingDeleteId === game.id ? 'Confirmar exclusão do jogo' : 'Apagar jogo'}
+                            title={confirmingDeleteId === game.id ? 'Clique de novo para apagar' : 'Apagar jogo'}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                            {confirmingDeleteId === game.id && 'Confirmar'}
                           </button>
                         )}
                       </div>

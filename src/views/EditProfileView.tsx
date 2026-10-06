@@ -1,5 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Camera, ShieldCheck } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { AnimatePresence, motion } from 'motion/react';
+import { Camera, ShieldCheck, Trash2 } from 'lucide-react';
 import { Athlete } from '../types';
 import { CountrySelect } from '../components/CountrySelect';
 import { ImageCropper } from '../components/ImageCropper';
@@ -56,9 +58,12 @@ interface EditProfileViewProps {
   onSave: (data: Partial<Athlete>) => void;
   onDelete?: (id: string) => void;
   athletes?: Athlete[];
+  // Lista do atleta: o contato do empresário só existe no formulário de Negociados
+  listType?: 'agenciados' | 'negociados';
 }
 
-export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = [] }: EditProfileViewProps) => {
+export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = [], listType = 'agenciados' }: EditProfileViewProps) => {
+  const isNegociado = listType === 'negociados';
   const [athleteImage, setAthleteImage] = useState(athlete?.image || "https://picsum.photos/seed/athlete_profile/300/300");
   // Foto aberta no ajuste de enquadramento (só vira a foto do atleta ao clicar em "Aplicar")
   const [cropSource, setCropSource] = useState<string | null>(null);
@@ -78,6 +83,13 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
   const heightRef = useRef<HTMLInputElement>(null);
   const whatsappAthleteRef = useRef<HTMLInputElement>(null);
   const whatsappGuardianRef = useRef<HTMLInputElement>(null);
+  const whatsappAgentRef = useRef<HTMLInputElement>(null);
+  const agentNameRef = useRef<HTMLInputElement>(null);
+  const agentCompanyRef = useRef<HTMLInputElement>(null);
+  // "Possui Empresário?" (só em Negociados): com "Não" os campos do empresário somem e são apagados ao salvar
+  const [hasAgent, setHasAgent] = useState(
+    !!(athlete?.hasAgent || athlete?.agentName || athlete?.agentCompany || athlete?.whatsappAgent)
+  );
   const contractStartRef = useRef<HTMLInputElement>(null);
   const contractEndRef = useRef<HTMLInputElement>(null);
   const contractLinkRef = useRef<HTMLInputElement>(null);
@@ -89,6 +101,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
 
   const [hasDvd, setHasDvd] = useState(athlete?.hasDvd ?? false);
   const [dvdLink, setDvdLink] = useState(athlete?.dvdLink || '');
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
@@ -113,6 +126,10 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
     const contractType = athlete?.contractType === 'Clube'
       ? 'Clube'
       : (contractStart || contractEnd || contractLink) ? 'Field' : undefined;
+    // Empresário: editado só em Negociados (nome, empresa e WhatsApp); em Agenciados mantém o que já estava gravado
+    const agentName = isNegociado ? (agentNameRef.current?.value || '').trim() : athlete?.agentName;
+    const agentCompany = isNegociado ? (agentCompanyRef.current?.value || '').trim() : athlete?.agentCompany;
+    const whatsappAgent = isNegociado ? (whatsappAgentRef.current?.value || '').trim() : athlete?.whatsappAgent;
     onSave({
       name: nameParts[0] || '',
       lastName: nameParts.slice(1).join(' ') || '',
@@ -133,11 +150,10 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
       height: toHeightCm(heightRef.current?.value),
       whatsappAthlete: whatsappAthleteRef.current?.value.trim(),
       whatsappGuardian: whatsappGuardianRef.current?.value.trim(),
-      // Empresário não é editado aqui: mantém o que já estava gravado
-      hasAgent: athlete?.hasAgent ?? false,
-      agentCompany: athlete?.agentCompany,
-      agentName: athlete?.agentName,
-      whatsappAgent: athlete?.whatsappAgent,
+      hasAgent: isNegociado ? hasAgent : athlete?.hasAgent ?? false,
+      agentCompany,
+      agentName,
+      whatsappAgent,
       contractType,
       contractLevel: contractLevel || undefined,
       contractClub: contractType === 'Clube' ? athlete?.contractClub : undefined,
@@ -329,6 +345,31 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
               <input type="tel" ref={whatsappGuardianRef} defaultValue={athlete?.whatsappGuardian || ''} className={inputClass} placeholder="(11) 99999-9999" />
             </div>
           </div>
+          {isNegociado && (
+            <div className="space-y-2">
+              <label className={labelClass}>Possui Empresário?</label>
+              <div className="flex gap-2 sm:gap-4">
+                <button type="button" onClick={() => setHasAgent(true)} className={toggleClass(hasAgent)}>SIM</button>
+                <button type="button" onClick={() => setHasAgent(false)} className={toggleClass(!hasAgent)}>NÃO</button>
+              </div>
+            </div>
+          )}
+          {isNegociado && hasAgent && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 [&>*]:min-w-0">
+              <div className="space-y-1">
+                <label className={labelClass}>Empresa do Empresário</label>
+                <input type="text" ref={agentCompanyRef} defaultValue={athlete?.agentCompany || ''} className={inputClass} placeholder="Nome da empresa" />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>Nome do Empresário</label>
+                <input type="text" ref={agentNameRef} defaultValue={athlete?.agentName || ''} className={inputClass} placeholder="Nome do empresário" />
+              </div>
+              <div className="space-y-1">
+                <label className={labelClass}>WhatsApp Empresário</label>
+                <input type="tel" ref={whatsappAgentRef} defaultValue={athlete?.whatsappAgent || ''} className={inputClass} placeholder="(11) 99999-9999" />
+              </div>
+            </div>
+          )}
         </FormSection>
 
         <FormSection title="Outras informações">
@@ -365,11 +406,7 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
         {athlete && onDelete ? (
           <button 
             type="button"
-            onClick={() => {
-              if (window.confirm(`Tem certeza que deseja apagar o atleta ${athlete.name}?`)) {
-                onDelete(athlete.id);
-              }
-            }} 
+            onClick={() => setConfirmingDelete(true)}
             className="rounded-2xl border border-error/20 bg-error/10 px-4 py-4 sm:px-8 sm:py-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-error transition hover:bg-error/20"
           >
             APAGAR ATLETA
@@ -378,6 +415,71 @@ export const EditProfileView = ({ athlete, onBack, onSave, onDelete, athletes = 
           <button onClick={onBack} className="rounded-2xl border border-white/10 bg-surface-high px-4 py-4 sm:px-8 sm:py-5 text-[11px] font-black uppercase tracking-[0.12em] sm:tracking-[0.2em] text-white transition hover:border-white/20">Cancelar</button>
         )}
       </div>
+
+      {/* Confirmação de exclusão, no mesmo padrão do "Encerrar sessão" */}
+      {createPortal(
+        <AnimatePresence>
+          {confirmingDelete && athlete && onDelete && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setConfirmingDelete(false)}
+              className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 px-6 backdrop-blur-md"
+            >
+              <motion.div
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="delete-athlete-title"
+                aria-describedby="delete-athlete-message"
+                initial={{ opacity: 0, scale: 0.94, y: 12 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(e) => e.key === 'Escape' && setConfirmingDelete(false)}
+                className="w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-surface-low shadow-[0_30px_80px_rgba(0,0,0,0.8)]"
+              >
+                <div className="h-1 w-full bg-gradient-to-r from-transparent via-primary to-transparent" />
+                <div className="px-8 pb-8 pt-9 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10">
+                    <Trash2 className="h-7 w-7 text-primary" />
+                  </div>
+                  <p className="mt-6 text-[10px] font-black uppercase tracking-[0.25em] text-on-surface-variant">Apagar atleta</p>
+                  <h3 id="delete-athlete-title" className="mt-2 break-words text-2xl font-black uppercase italic leading-tight tracking-tight text-white">
+                    Deseja apagar {`${athlete.name} ${athlete.lastName || ''}`.trim()}?
+                  </h3>
+                  <p id="delete-athlete-message" className="mt-4 text-sm leading-relaxed text-on-surface-variant">
+                    A exclusão é definitiva e não pode ser desfeita.
+                  </p>
+                  <div className="mt-8 flex gap-3">
+                    <button
+                      type="button"
+                      autoFocus
+                      onClick={() => setConfirmingDelete(false)}
+                      className="flex-1 rounded-2xl border border-white/10 bg-surface-high py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white transition hover:border-white/20"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirmingDelete(false);
+                        onDelete(athlete.id);
+                      }}
+                      className="flex-1 rounded-2xl bg-error py-4 text-[11px] font-black uppercase tracking-[0.2em] text-white shadow-xl transition hover:scale-[1.02]"
+                    >
+                      Apagar
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body,
+      )}
     </div>
   );
 };

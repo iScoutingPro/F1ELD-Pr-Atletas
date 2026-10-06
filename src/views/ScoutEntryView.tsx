@@ -52,6 +52,15 @@ const todayKey = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 };
 
+// Jogo do Calendário de data futura só entra na planilha quando faltam até estes dias
+const FUTURE_DAYS = 7;
+
+// Número do dia de uma data "aaaa-mm-dd", para contar dias entre duas datas
+const dayNumber = (date: string) => {
+  const [year, month, day] = date.split('-').map(Number);
+  return Math.round(Date.UTC(year, month - 1, day) / 86400000);
+};
+
 // Data e horário do jogo no formato da planilha do usuário: "03.01 às 13h00"
 const matchDateText = (date: string, time?: string) => {
   const [, month, day] = date.split('-');
@@ -61,7 +70,7 @@ const matchDateText = (date: string, time?: string) => {
 interface ScoutEntryViewProps {
   entries: ScoutEntry[];
   athletes: Athlete[];
-  // Só para sugerir as competições já cadastradas no Calendário
+  // Jogos do Calendário: abrem a planilha já preenchida e sugerem as competições
   games: Game[];
   onSave: (rows: ScoutEntryInput[], editingId?: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
@@ -196,18 +205,22 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     };
   }, [athletes, entries, games, rows]);
 
-  // Jogos do Calendário já realizados que ainda não têm scout: uma linha por atleta vinculado, do jogo mais antigo para o mais novo,
-  // já com ano, equipe, data, competição e partida. O jogo sai da lista quando o scout daquele atleta é salvo
+  // Jogos do Calendário que ainda não têm scout, os já realizados e os dos próximos FUTURE_DAYS dias: uma linha por atleta vinculado,
+  // do jogo mais perto de hoje para o mais distante, já com ano, equipe, data, competição e partida. Jogo sem atleta vinculado entra com uma linha para escolher o atleta.
+  // A linha sai da lista quando o scout daquele atleta (ou, no jogo sem atleta, o primeiro scout do jogo) é salvo
   const pendingRows = useMemo(() => {
-    const today = todayKey();
     const done = new Set(entries.filter((entry) => entry.gameId).map((entry) => `${entry.gameId}|${entry.athleteId}`));
-    return [...games]
-      .filter((game) => game.date <= today)
-      .sort((a, b) => `${a.date} ${a.time || ''}`.localeCompare(`${b.date} ${b.time || ''}`))
-      .flatMap((game) => game.athleteIds
-        .filter((id) => athleteById.has(id) && !done.has(`${game.id}|${id}`))
-        .map((id): Row => {
-          const club = athleteById.get(id)!.club;
+    const gamesWithScout = new Set(entries.map((entry) => entry.gameId).filter(Boolean));
+    const today = dayNumber(todayKey());
+    // Dias de distância de hoje: negativo para jogo já realizado
+    const offset = (game: Game) => dayNumber(game.date) - today;
+    return games
+      .filter((game) => offset(game) <= FUTURE_DAYS)
+      // O jogo mais perto de hoje primeiro; na mesma distância, o já realizado antes do que ainda vai acontecer
+      .sort((a, b) => Math.abs(offset(a)) - Math.abs(offset(b)) || offset(a) - offset(b) || (a.time || '').localeCompare(b.time || ''))
+      .flatMap((game) => {
+        const gameRow = (id: string): Row => {
+          const club = athleteById.get(id)?.club;
           return {
             gameId: game.id,
             athlete: id,
@@ -218,26 +231,25 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
             round: game.round || '',
             match: `${game.home} x ${game.away}`,
           };
-        }));
+        };
+        const linked = game.athleteIds.filter((id) => athleteById.has(id));
+        if (linked.length === 0) return gamesWithScout.has(game.id) ? [] : [gameRow('')];
+        return linked.filter((id) => !done.has(`${game.id}|${id}`)).map(gameRow);
+      });
   }, [games, entries, athleteById]);
 
-  // Jogos do Calendário que ainda não entram na planilha, para o topo da aba explicar o motivo:
-  // os de data futura (entram no dia do jogo) e os já realizados sem atleta vinculado
-  const waitingGames = useMemo(() => {
-    const today = todayKey();
-    const linked = (game: Game) => game.athleteIds.some((id) => athleteById.has(id));
-    return {
-      future: games.filter((game) => game.date > today && linked(game)).length,
-      withoutAthletes: games.filter((game) => game.date <= today && !linked(game)).length,
-    };
-  }, [games, athleteById]);
-  const calendarStatus = [
-    pendingRows.length > 0 && `${pendingRows.length} ${pendingRows.length === 1 ? 'scout pendente' : 'scouts pendentes'}`,
-    waitingGames.future > 0 && `${waitingGames.future} ${waitingGames.future === 1 ? 'jogo futuro entra' : 'jogos futuros entram'} na data do jogo`,
-    waitingGames.withoutAthletes > 0 && `${waitingGames.withoutAthletes} ${waitingGames.withoutAthletes === 1 ? 'jogo' : 'jogos'} sem atleta vinculado`,
-  ].filter(Boolean);
+  // Situação do Calendário no topo da aba: quantos scouts aguardam e quantos jogos ainda vão entrar na planilha quando a data chegar perto
+  const calendarStatus = useMemo(() => {
+    const limit = dayNumber(todayKey()) + FUTURE_DAYS;
+    const later = games.filter((game) => dayNumber(game.date) > limit).length;
+    return [
+      pendingRows.length > 0 && `${pendingRows.length} ${pendingRows.length === 1 ? 'scout pendente' : 'scouts pendentes'}`,
+      later > 0 && `${later} ${later === 1 ? 'jogo entra' : 'jogos entram'} ${FUTURE_DAYS} dias antes da data`,
+    ].filter(Boolean);
+  }, [games, pendingRows]);
 
-  // Ao escolher o atleta, a linha já vem com o ano atual, o clube do cadastro e a competição do último scout dele
+  // Ao escolher o atleta, a linha já vem com o ano atual, o clube do cadastro e a competição do último scout dele.
+  // Em linha de jogo do Calendário a competição do jogo é mantida
   const pickAthlete = (rowIndex: number, athleteId: string) => {
     const athlete = athleteById.get(athleteId);
     const last = sortScoutEntries(entries).find((entry) => entry.athleteId === athleteId);
@@ -247,7 +259,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
       athlete: athleteId,
       year: row.year || (athlete ? String(new Date().getFullYear()) : ''),
       team: athlete && athlete.club && athlete.club !== NO_CLUB ? athlete.club : (row.team || ''),
-      competition: last?.competition || row.competition || '',
+      competition: (row.gameId && row.competition) || last?.competition || row.competition || '',
     })));
   };
 
@@ -507,7 +519,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                 {editing
                   ? 'Altere as informações do lançamento e salve.'
                   : pendingRows.length > 0
-                    ? 'Os jogos do Calendário já realizados vêm no início, com os dados da partida preenchidos: complete o placar em "Partida" e os números. Linha de jogo sem nenhum número não é salva e volta na próxima vez.'
+                    ? 'Os jogos do Calendário sem scout vêm no início, do mais perto de hoje para o mais distante, com os dados da partida preenchidos: complete o placar em "Partida" e os números. Linha de jogo sem nenhum número não é salva e volta na próxima vez.'
                     : 'Preencha uma linha por atleta em cada partida. Ao escolher o atleta, o ano, a equipe e a competição já vêm preenchidos; confira e troque se for outro. Totais e percentuais não são preenchidos: o app calcula e mostra na tabela.'}
               </p>
             </div>
@@ -525,8 +537,8 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                 <tbody>
                   {rows.map((row, rowIndex) => {
                     // Linha com algo preenchido e sem atleta escolhido fica marcada
-                    const athleteMissing = !isEmptyRow(row) && !row.athlete;
                     const untouched = isUntouchedGameRow(row);
+                    const athleteMissing = !isEmptyRow(row) && !untouched && !row.athlete;
                     const inputClass = 'h-10 w-full rounded-xl border bg-white/[0.04] px-2.5 text-center text-sm text-white outline-none transition focus:border-primary focus:bg-white/10';
                     return (
                       <tr key={rowIndex} title={untouched ? 'Jogo do Calendário aguardando os números' : undefined}>

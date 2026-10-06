@@ -112,7 +112,7 @@ const Detail = ({ icon: Icon, label, muted, className = '', children }: { icon: 
 const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
   <span
     title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
-    className="flex h-10 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-[52px] sm:w-20 sm:p-1.5"
+    className="flex h-12 w-[68px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-16 sm:w-[104px]"
   >
     {list === 'negociados' ? (
       <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />

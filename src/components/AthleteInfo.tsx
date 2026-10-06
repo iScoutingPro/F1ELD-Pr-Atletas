@@ -74,6 +74,12 @@ const ContactCard = ({ label, phone }: { label: string; phone?: string }) => pho
 );
 
 export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
+  // Em Negociados, empresário com empresa ou nome aparece no cartão do empresário (com o WhatsApp);
+  // só com o WhatsApp, aparece como terceiro contato
+  const isNegociado = athlete.listType === 'negociados';
+  const hasAgentDetails = !!athlete.agentCompany || !!athlete.agentName;
+  const showAgentCard = isNegociado ? hasAgentDetails : !!athlete.hasAgent;
+  const showAgentContact = isNegociado && !hasAgentDetails;
   const stats = [
     { label: 'Idade', value: athlete.age ? String(athlete.age) : '', unit: 'anos' },
     { label: 'Altura', value: athlete.height ? (athlete.height / 100).toFixed(2).replace('.', ',') : '', unit: 'm' },
@@ -198,12 +204,13 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
 
       <div className="space-y-3">
         <SectionTitle>Contatos</SectionTitle>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${showAgentContact ? 'lg:grid-cols-3' : ''}`}>
           <ContactCard label="WhatsApp Atleta" phone={athlete.whatsappAthlete} />
           <ContactCard label="WhatsApp Responsável" phone={athlete.whatsappGuardian} />
+          {showAgentContact && <ContactCard label="WhatsApp Empresário" phone={athlete.whatsappAgent} />}
         </div>
 
-        {athlete.hasAgent && (
+        {showAgentCard && (
           <div className={`${panelClass} relative overflow-hidden p-6`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
             <div className="flex flex-wrap items-center justify-between gap-4">

@@ -33,6 +33,7 @@ export interface Athlete {
   contractStart?: string;
   contractEnd?: string;
   contractLink?: string;
+  contractGoals?: ContractGoal[];
   notes?: string;
   hasDvd?: boolean;
   dvdLink?: string;
@@ -43,6 +44,17 @@ export interface Athlete {
     physical: number;
     technical: number;
   };
+}
+
+// Meta estipulada no contrato do atleta (ícone Contrato do perfil)
+export interface ContractGoal {
+  id: string;
+  title: string;
+  // 'manual' (o valor atual é digitado) ou a chave de um número do scout (SCOUT_FIELDS), somado dos lançamentos do atleta
+  metric: string;
+  target: number;
+  // Só nas metas manuais
+  current?: number;
 }
 
 export interface Game {

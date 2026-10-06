@@ -1,17 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
+import { ArrowLeft, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { MOCK_ATHLETES } from './data';
-import { Athlete, Game, ScoutEntry, ScoutEntryInput, View } from './types';
+import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, View } from './types';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
 import { AthleteInfo } from './components/AthleteInfo';
 import { AthleteGames } from './components/AthleteGames';
 import { AthleteScout } from './components/AthleteScout';
+import { AthleteContract } from './components/AthleteContract';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
@@ -158,6 +159,7 @@ const mapAthleteRow = (a: any): Athlete => ({
   contractStart: a.contract_start,
   contractEnd: a.contract_end,
   contractLink: a.contract_link,
+  contractGoals: a.contract_goals || [],
   source: a.source || 'Captado',
   listType: a.list_type || 'agenciados',
 });
@@ -575,6 +577,7 @@ export default function App() {
         contractStart: athleteData.contractStart,
         contractEnd: athleteData.contractEnd,
         contractLink: athleteData.contractLink,
+        contractGoals: selectedAthlete?.contractGoals,
         notes: athleteData.notes,
         hasDvd: athleteData.hasDvd,
         dvdLink: athleteData.dvdLink,
@@ -767,6 +770,44 @@ export default function App() {
     }
     
     setLoading(false);
+  };
+
+  // Metas do contrato (ícone Contrato do perfil): grava só a coluna contract_goals, fora do formulário do atleta
+  const handleSaveContractGoals = async (athlete: Athlete, goals: ContractGoal[]): Promise<boolean> => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('editar'));
+      return false;
+    }
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(athlete.id);
+    if (hasSupabaseConfig && supabase && isUuid) {
+      const { data, error } = await supabase.from('athletes').update({ contract_goals: goals }).eq('id', athlete.id).select('id');
+
+      if (error) {
+        console.error('Erro ao salvar metas do contrato:', error);
+        if (error.code === RLS_VIOLATION_CODE) {
+          setNotice(notAllowedMessage('editar'));
+        } else if (error.code === MISSING_COLUMN_CODE) {
+          setNotice({
+            title: 'Metas não configuradas',
+            message: 'O banco de dados ainda não está preparado para as metas do contrato. Execute o arquivo supabase/athlete_profile_fields.sql no SQL Editor do Supabase e tente de novo.',
+          });
+        } else {
+          setNotice(errorNotice('Erro ao salvar metas', error));
+        }
+        return false;
+      }
+
+      // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+      if (!data || data.length === 0) {
+        setNotice(notAllowedMessage('editar'));
+        return false;
+      }
+    }
+
+    setAthletes(prev => prev.map(a => (a.id === athlete.id ? { ...a, contractGoals: goals } : a)));
+    setSelectedAthlete(prev => (prev && prev.id === athlete.id ? { ...prev, contractGoals: goals } : prev));
+    return true;
   };
 
   // Devolve true quando o jogo foi gravado, para o formulário do calendário saber se pode fechar
@@ -1098,9 +1139,9 @@ export default function App() {
                       <button
                         key={key}
                         type="button"
-                        // Clicar de novo no ícone aberto (Calendário ou Scout) volta para as informações do perfil
-                        onClick={() => setProfileDetailView(prev => ((key === 'calendar' || key === 'stats') && prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
-                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${(key === 'calendar' || key === 'stats') && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
+                        // Clicar de novo no ícone aberto (Calendário, Scout ou Contrato) volta para as informações do perfil
+                        onClick={() => setProfileDetailView(prev => (['calendar', 'stats', 'contract'].includes(key) && prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
+                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${['calendar', 'stats', 'contract'].includes(key) && profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >
@@ -1118,10 +1159,28 @@ export default function App() {
                 onChange={handleAthleteImageChange}
                 className="hidden"
               />
+              {/* Com Calendário, Scout ou Contrato aberto, o botão leva de volta às informações do atleta */}
+              {profileDetailView && ['calendar', 'stats', 'contract'].includes(profileDetailView) && (
+                <button
+                  type="button"
+                  onClick={() => setProfileDetailView(null)}
+                  className="mt-6 inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 text-[9px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary hover:bg-primary hover:text-background"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Voltar para as informações
+                </button>
+              )}
               {profileDetailView === 'calendar' ? (
                 <AthleteGames athlete={selectedAthlete} games={games} />
               ) : profileDetailView === 'stats' ? (
                 <AthleteScout entries={scoutEntriesOf(selectedAthlete)} />
+              ) : profileDetailView === 'contract' ? (
+                <AthleteContract
+                  athlete={selectedAthlete}
+                  entries={scoutEntriesOf(selectedAthlete)}
+                  isAdmin={isAdmin}
+                  onSaveGoals={(goals) => handleSaveContractGoals(selectedAthlete, goals)}
+                />
               ) : (
                 <AthleteInfo athlete={selectedAthlete} />
               )}
@@ -1150,7 +1209,8 @@ export default function App() {
                 onSave={handleSaveAthlete} 
                 onDelete={isAdmin ? handleDeleteAthlete : undefined}
                 onBack={closeAthleteModal} 
-                athletes={athletes} 
+                athletes={athletes}
+                listType={selectedAthlete?.listType ?? addingListType}
               />
             </div>
           </div>
