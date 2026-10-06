@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ClipboardList, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
+import { Check, ClipboardList, Minus, Pencil, Plus, Save, Search, Trash2, X } from 'lucide-react';
 import { Athlete, Game, ScoutEntry, ScoutEntryInput } from '../types';
 import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, formatScoutValue, sortScoutEntries } from '../scout';
 import { SheetSelect, normalize } from '../components/SheetSelect';
@@ -154,7 +154,7 @@ const isEmptyRow = (row: Row) => SHEET_COLUMNS.every(({ key }) => (row[key] || '
 
 // Lançamento do scout (só admin): o botão abre uma planilha, uma linha por atleta em cada partida,
 // e a tela lista embaixo tudo o que já foi lançado. A planilha já abre com os jogos do Calendário que aguardam scout.
-// O lançamento é só no computador: no celular (abaixo de sm) o botão, o lápis e a lixeira somem e fica só a tabela
+// O lançamento é só no computador: no celular (abaixo de sm) o botão, as caixas de seleção e os botões de editar e excluir somem e fica só a tabela
 export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: ScoutEntryViewProps) => {
   const [rows, setRows] = useState<Row[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -162,7 +162,9 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
   const [saving, setSaving] = useState(false);
   const [sheetError, setSheetError] = useState('');
   const [search, setSearch] = useState('');
-  const [confirmingDelete, setConfirmingDelete] = useState('');
+  const [selected, setSelected] = useState<string[]>([]);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const athleteById = useMemo(() => new Map(athletes.map((athlete) => [athlete.id, athlete])), [athletes]);
   // Opções da coluna Atleta: todos os cadastrados, em ordem alfabética. Quem está nas duas listas tem dois cadastros
@@ -278,6 +280,12 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     setRows((prev) => prev.map((row, index) => (index === rowIndex ? { ...row, [column.key]: cleanValue(column, value) } : row)));
   };
 
+  // A planilha nunca fica sem linha: remover a única deixa uma em branco
+  const removeRow = (rowIndex: number) => {
+    setSheetError('');
+    setRows((prev) => (prev.length > 1 ? prev.filter((_, index) => index !== rowIndex) : [{}]));
+  };
+
   const handleSave = async () => {
     if (saving) return;
     const filled = rows.filter((row) => !isEmptyRow(row) && !isUntouchedGameRow(row));
@@ -313,16 +321,6 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     if (ok) setSheetOpen(false);
   };
 
-  // Exclusão com confirmação em dois cliques
-  const handleDelete = async (id: string) => {
-    if (confirmingDelete !== id) {
-      setConfirmingDelete(id);
-      return;
-    }
-    setConfirmingDelete('');
-    await onDelete(id);
-  };
-
   const sorted = useMemo(() => sortScoutEntries(entries), [entries]);
   const term = normalize(search);
   const visible = term
@@ -332,10 +330,46 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
       })
     : sorted;
 
+  // Seleção de lançamentos: os botões do topo da tabela (editar e excluir) agem sobre as linhas marcadas.
+  // Só contam as marcadas que estão na tela, para a pesquisa não deixar nada selecionado escondido
+  const selectedEntries = visible.filter((entry) => selected.includes(entry.id));
+  const allSelected = visible.length > 0 && selectedEntries.length === visible.length;
+
+  const toggleSelected = (id: string) => {
+    setConfirmingDelete(false);
+    setSelected((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
+  };
+
+  const toggleAll = () => {
+    setConfirmingDelete(false);
+    setSelected(allSelected ? [] : visible.map((entry) => entry.id));
+  };
+
+  // Exclusão com confirmação em dois cliques; para no primeiro lançamento que não puder ser apagado
+  const handleDeleteSelected = async () => {
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      return;
+    }
+    setConfirmingDelete(false);
+    setDeleting(true);
+    for (const entry of selectedEntries) {
+      if (!(await onDelete(entry.id))) break;
+    }
+    setDeleting(false);
+    setSelected([]);
+  };
+
   const headClass = 'whitespace-nowrap px-3 py-2 text-[9px] font-black uppercase tracking-[0.14em]';
   const cellClass = 'whitespace-nowrap border-t border-white/5 px-3 py-2.5 text-xs text-white/80';
-  // O nome do atleta fica parado à esquerda ao rolar a tabela para o lado
-  const stickyClass = 'sticky left-0 z-10 bg-surface-low';
+  // A caixa de seleção e o nome do atleta ficam parados à esquerda ao rolar a tabela para o lado
+  const stickyClass = 'sticky left-0 z-10 sm:left-10';
+  const checkColumnClass = 'sticky left-0 z-10 w-10 min-w-10 !px-0 max-sm:hidden';
+  // As colunas paradas precisam de fundo sólido, igual ao da linha, para os números não aparecerem por baixo ao rolar
+  const stickyBg = (isSelected: boolean) => (isSelected ? 'bg-surface-high' : 'bg-surface-low group-hover:bg-surface');
+  const checkBoxClass = (on: boolean) => `mx-auto flex h-[18px] w-[18px] items-center justify-center rounded-md border transition ${on ? 'border-primary bg-primary text-background' : 'border-white/25 text-transparent hover:border-white/60'}`;
+  const toolButtonClass = 'flex h-9 items-center justify-center gap-1.5 rounded-full border px-4 text-[9px] font-black uppercase tracking-[0.14em] transition disabled:cursor-not-allowed disabled:opacity-35';
+  const neutralToolClass = 'border-white/10 text-on-surface-variant enabled:hover:bg-white/10 enabled:hover:text-white';
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10 space-y-6">
@@ -363,22 +397,44 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
 
       <ScoutOverview entries={entries} athletes={athletes} />
 
-      <section className={`${panelClass} p-4`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-on-surface-variant">
-            Lançamentos <span className="ml-1 text-white">{term ? `${visible.length} de ${sorted.length}` : sorted.length}</span>
-          </p>
+      <section className="rounded-3xl border border-white/10 bg-surface-low p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+        <div className="flex flex-wrap items-center gap-3 px-1">
           {sorted.length > 0 && (
-            <label className="relative block w-full sm:w-72">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
-              <input
-                type="text"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Pesquisar atleta, equipe ou partida"
-                className="w-full rounded-full border border-white/10 bg-surface-high py-2 pl-9 pr-4 text-xs font-bold text-white outline-none transition placeholder:text-on-surface-variant focus:border-primary"
-              />
-            </label>
+            <>
+              <label className="relative block w-full sm:w-72">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-on-surface-variant" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Pesquisar atleta, equipe ou partida"
+                  className="w-full rounded-full border border-white/10 bg-surface-high py-2 pl-9 pr-4 text-xs font-bold text-white outline-none transition placeholder:text-on-surface-variant focus:border-primary"
+                />
+              </label>
+              <div className="flex items-center gap-2 max-sm:hidden">
+                <button
+                  type="button"
+                  onClick={() => openSheet(selectedEntries[0])}
+                  disabled={selectedEntries.length !== 1}
+                  title={selectedEntries.length > 1 ? 'Selecione só um lançamento para editar' : 'Editar o lançamento selecionado'}
+                  className={`${toolButtonClass} ${neutralToolClass}`}
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteSelected}
+                  onBlur={() => setConfirmingDelete(false)}
+                  disabled={selectedEntries.length === 0 || deleting}
+                  title="Excluir os lançamentos selecionados"
+                  className={`${toolButtonClass} ${confirmingDelete ? 'border-error/40 bg-error/15 text-error hover:bg-error hover:text-white' : neutralToolClass}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {confirmingDelete ? `Confirmar (${selectedEntries.length})` : selectedEntries.length > 0 ? `Excluir (${selectedEntries.length})` : 'Excluir'}
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -394,19 +450,29 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
             <table className="w-full border-separate border-spacing-0 text-center">
               <thead>
                 <tr>
+                  <th className={`${headClass} ${checkColumnClass} bg-surface-low`}>
+                    <button type="button" onClick={toggleAll} className={checkBoxClass(allSelected)} aria-label={allSelected ? 'Limpar seleção' : 'Selecionar todos'}>
+                      <Check className="h-3 w-3" strokeWidth={4} />
+                    </button>
+                  </th>
                   {COLUMNS.map((column) => (
-                    <th key={column.key} className={`${headClass} ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'} ${column.kind === 'athlete' ? stickyClass : ''}`}>{column.label}</th>
+                    <th key={column.key} className={`${headClass} ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'} ${column.kind === 'athlete' ? `${stickyClass} bg-surface-low` : ''}`}>{column.label}</th>
                   ))}
-                  <th className={`${headClass} max-sm:hidden`} />
                 </tr>
               </thead>
               <tbody>
                 {visible.map((entry) => {
                   const athlete = athleteById.get(entry.athleteId);
+                  const isSelected = selected.includes(entry.id);
                   return (
-                    <tr key={entry.id} className="transition hover:bg-white/[0.03]">
+                    <tr key={entry.id} className={`group ${isSelected ? 'bg-surface-high' : 'hover:bg-surface'}`}>
+                      <td className={`${cellClass} ${checkColumnClass} ${stickyBg(isSelected)}`}>
+                        <button type="button" onClick={() => toggleSelected(entry.id)} className={checkBoxClass(isSelected)} aria-label={isSelected ? 'Desmarcar lançamento' : 'Selecionar lançamento'} aria-pressed={isSelected}>
+                          <Check className="h-3 w-3" strokeWidth={4} />
+                        </button>
+                      </td>
                       {COLUMNS.map(({ key, kind, field }) => (
-                        <td key={key} className={`${cellClass} ${kind === 'athlete' ? `${stickyClass} font-black uppercase italic text-white` : ''} ${field ? 'font-black text-white' : ''}`}>
+                        <td key={key} className={`${cellClass} ${kind === 'athlete' ? `${stickyClass} ${stickyBg(isSelected)} font-black uppercase italic text-white` : ''} ${field ? 'font-black text-white' : ''}`}>
                           {kind === 'athlete'
                             ? (athlete ? fullName(athlete) : 'Atleta apagado')
                             : field
@@ -414,30 +480,6 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                               : entry[key as keyof ScoutEntry] as string}
                         </td>
                       ))}
-                      <td className={`${cellClass} max-sm:hidden`}>
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openSheet(entry)}
-                            className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:bg-white/10 hover:text-white"
-                            aria-label="Editar lançamento"
-                            title="Editar"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(entry.id)}
-                            onBlur={() => setConfirmingDelete('')}
-                            className={`flex h-8 items-center justify-center gap-1.5 rounded-full border text-[9px] font-black uppercase tracking-[0.14em] transition ${confirmingDelete === entry.id ? 'border-error/40 bg-error/15 px-3 text-error hover:bg-error hover:text-white' : 'w-8 border-white/10 text-on-surface-variant hover:bg-white/10 hover:text-white'}`}
-                            aria-label="Excluir lançamento"
-                            title="Excluir"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {confirmingDelete === entry.id && 'Confirmar'}
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })}
@@ -474,10 +516,10 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
               <table className="w-full border-separate border-spacing-0 text-center">
                 <thead>
                   <tr>
+                    {!editing && <th />}
                     {SHEET_COLUMNS.map((column) => (
                       <th key={column.key} className={`whitespace-nowrap px-1 py-2 text-[9px] font-black uppercase tracking-[0.14em] ${isTextColumn(column) ? 'text-on-surface-variant' : 'text-primary'}`}>{column.label}</th>
                     ))}
-                    {!editing && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -488,6 +530,19 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                     const inputClass = 'h-10 w-full rounded-xl border bg-white/[0.04] px-2.5 text-center text-sm text-white outline-none transition focus:border-primary focus:bg-white/10';
                     return (
                       <tr key={rowIndex} title={untouched ? 'Jogo do Calendário aguardando os números' : undefined}>
+                        {!editing && (
+                          <td className="py-1 pr-1">
+                            <button
+                              type="button"
+                              onClick={() => removeRow(rowIndex)}
+                              className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-error/40 hover:bg-error/15 hover:text-error"
+                              aria-label={`Remover linha ${rowIndex + 1}`}
+                              title="Remover linha"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        )}
                         {SHEET_COLUMNS.map((column) => (
                           <td key={column.key} className="px-0.5 py-1">
                             {column.kind === 'athlete' ? (
@@ -521,19 +576,6 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                             )}
                           </td>
                         ))}
-                        {!editing && (
-                          <td className="px-0.5 py-1">
-                            <button
-                              type="button"
-                              onClick={() => setRows((prev) => (prev.length > 1 ? prev.filter((_, index) => index !== rowIndex) : [{}]))}
-                              className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant transition hover:bg-white/10 hover:text-white"
-                              aria-label={`Remover linha ${rowIndex + 1}`}
-                              title="Remover linha"
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </td>
-                        )}
                       </tr>
                     );
                   })}
@@ -552,6 +594,17 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                 >
                   <Plus className="h-3.5 w-3.5" />
                   Adicionar linha
+                </button>
+              )}
+              {!editing && (
+                <button
+                  type="button"
+                  onClick={() => removeRow(rows.length - 1)}
+                  title="Remove a última linha da planilha"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:bg-white/10"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                  Remover linha
                 </button>
               )}
               <div className="flex flex-1 justify-end gap-2 sm:gap-3">
