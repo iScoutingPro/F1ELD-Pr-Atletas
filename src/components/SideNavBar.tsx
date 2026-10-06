@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, UserCheck, Handshake, CalendarRange, ClipboardList, LogOut, ChevronRight, Bell } from 'lucide-react';
+import { LayoutGrid, Users, CalendarRange, ClipboardList, LogOut, ChevronRight, Bell } from 'lucide-react';
 import { View, NavItem } from '../types';
 import { Logo } from './Logo';
 
@@ -17,10 +17,9 @@ interface SideNavBarProps {
 export const SideNavBar = ({ activeView, setView, isAdmin, onLogout, onToggleNotifications, notificationsOpen = false, unreadNotifications = 0 }: SideNavBarProps) => {
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutGrid },
+    // Agenciados e Negociados não têm mais aba própria: ficam em Atletas Totais, pelo filtro de lista
+    { id: 'atletas-totais', label: 'Carteira de Atletas', icon: Users },
     { id: 'calendar', label: 'Calendário', icon: CalendarRange },
-    { id: 'athletes', label: 'Atletas Agenciados', icon: UserCheck },
-    { id: 'negociados', label: 'Atletas Negociados', icon: Handshake },
-    { id: 'atletas-totais', label: 'Atletas Totais', icon: Users },
     // Lançamento do scout: só aparece para administradores
     ...(isAdmin ? [{ id: 'lancar-scout' as View, label: 'Scout', icon: ClipboardList }] : []),
   ];

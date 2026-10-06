@@ -21,7 +21,7 @@ import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
 import { ScoutView } from './views/ScoutView';
 import { AgenciadosNegociadosView } from './views/AgenciadosNegociadosView';
-import { AtletasTotaisView } from './views/AtletasTotaisView';
+import { AtletasTotaisView, ListFilter } from './views/AtletasTotaisView';
 import { AthletesListView } from './views/AthletesListView';
 import { ReportsView } from './views/ReportsView';
 import { SettingsView } from './views/SettingsView';
@@ -172,8 +172,10 @@ export default function App() {
   const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
-  // Lista da aba em que o "+" foi clicado, guardada na abertura do cadastro
+  // Lista escolhida na pergunta do "Adicionar atleta", guardada na abertura do cadastro
   const [addingListType, setAddingListType] = useState<'agenciados' | 'negociados'>('agenciados');
+  // Filtro de lista com que a aba Atletas Totais abre (os cards do painel abrem já filtrado)
+  const [totalsFilter, setTotalsFilter] = useState<ListFilter>('todos');
   const [isViewingAthleteProfile, setIsViewingAthleteProfile] = useState(false);
   const [isEditingAthlete, setIsEditingAthlete] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -521,7 +523,17 @@ export default function App() {
   };
 
   // Depois de salvar ou apagar, quem está em Atletas Negociados continua nessa aba
-  const returnToList = () => setView(prev => (prev === 'negociados' ? prev : 'athletes'));
+  const returnToList = () => setView('atletas-totais');
+
+  // As abas Agenciados e Negociados saíram do menu: quem pedia uma delas vai para Atletas Totais já filtrado
+  const navigateTo = (next: View) => {
+    if (next === 'athletes' || next === 'negociados' || next === 'atletas-totais') {
+      setTotalsFilter(next === 'athletes' ? 'agenciados' : next === 'negociados' ? 'negociados' : 'todos');
+      setView('atletas-totais');
+      return;
+    }
+    setView(next);
+  };
 
   const handleSaveAthlete = async (athleteData: Partial<Athlete>) => {
     if (!isAdmin) {
@@ -989,6 +1001,13 @@ export default function App() {
     return scoutEntries.filter(e => ids.has(e.athleteId));
   };
 
+  // O outro cadastro de quem está nas duas listas (mesmo nome completo e nascimento, como em buildEntries)
+  const twinOf = (athlete: Athlete) => {
+    const keyOf = (a: Athlete) => `${`${a.name} ${a.lastName || ''}`.trim().toLowerCase().replace(/\s+/g, ' ')}|${(a.birthDate || '').slice(0, 10)}`;
+    const listOf = (a: Athlete) => a.listType || 'agenciados';
+    return athletes.find(a => a.id !== athlete.id && listOf(a) !== listOf(athlete) && keyOf(a) === keyOf(athlete)) || null;
+  };
+
   const handleDeleteGame = async (id: string): Promise<boolean> => {
     if (!isAdmin) {
       setNotice(notAllowedMessage('excluir', 'jogos'));
@@ -1024,13 +1043,13 @@ export default function App() {
     setIsEditingAthlete(true);
   };
 
-  const openAddAthlete = () => {
+  const openAddAthlete = (list: 'agenciados' | 'negociados') => {
     if (!isAdmin) {
       return;
     }
 
     setSelectedAthlete(null);
-    setAddingListType(view === 'negociados' ? 'negociados' : 'agenciados');
+    setAddingListType(list);
     setIsAddingAthlete(true);
   };
 
@@ -1066,19 +1085,20 @@ export default function App() {
       case 'login': return <LoginView onLogin={() => setView('dashboard')} onForgot={() => setView('recovery')} />;
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
-      case 'dashboard': return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} onAthletesClick={() => setView('athletes')} onNavigate={(view) => setView(view)} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
-      case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
+      case 'dashboard': return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} onNavigate={navigateTo} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
+      // 'athletes' e 'negociados' não têm mais atalho na interface (tudo fica em Atletas Totais)
+      case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? () => openAddAthlete('agenciados') : undefined} />;
       case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'negociados': return (
         <AthletesListView
           athletes={athletes.filter(a => a.listType === 'negociados')}
           onSelectAthlete={openAthleteProfile}
-          onAddAthlete={isAdmin ? openAddAthlete : undefined}
+          onAddAthlete={isAdmin ? () => openAddAthlete('negociados') : undefined}
           title="Atletas Negociados"
         />
       );
       case 'agenciados-negociados': return <AgenciadosNegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
-      case 'atletas-totais': return <AtletasTotaisView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
+      case 'atletas-totais': return <AtletasTotaisView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} initialListFilter={totalsFilter} />;
       case 'sessions': return <SessionsView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
       case 'settings': return <SettingsView onLogout={confirmLogout} />;
       case 'security': return <SecurityView onComplete={handlePasswordUpdate} />;
@@ -1099,10 +1119,11 @@ export default function App() {
   };
 
   const showShell = !['login', 'recovery', 'verification', 'security', 'success'].includes(view);
+  const selectedTwin = selectedAthlete ? twinOf(selectedAthlete) : null;
 
   return (
     <div className="min-h-screen bg-background text-on-surface">
-      {showShell && <SideNavBar activeView={view} setView={(next) => { setShowNotifications(false); setView(next); }}isAdmin={isAdmin} onLogout={confirmLogout} onToggleNotifications={toggleNotifications} notificationsOpen={view === 'dashboard' && showNotifications} unreadNotifications={unreadNotifications} />}
+      {showShell && <SideNavBar activeView={view} setView={(next) => { setShowNotifications(false); navigateTo(next); }}isAdmin={isAdmin} onLogout={confirmLogout} onToggleNotifications={toggleNotifications} notificationsOpen={view === 'dashboard' && showNotifications} unreadNotifications={unreadNotifications} />}
 
       <main className={`relative ${showShell ? 'pl-16 lg:pl-80' : ''}`}>
         <AnimatePresence mode="wait">
@@ -1151,6 +1172,25 @@ export default function App() {
                     <p className="mt-3 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
                       Contrato: <span className="text-primary">{selectedAthlete.contractLevel || '—'}</span>
                     </p>
+                    {/* Atleta nas duas listas: troca entre o cadastro de Agenciados e o de Negociados sem sair do perfil */}
+                    {selectedTwin && (
+                      <div className="mt-3 inline-flex rounded-full border border-white/10 bg-black/30 p-1 text-[9px] font-black uppercase tracking-[0.18em]">
+                        {(['agenciados', 'negociados'] as const).map(list => {
+                          const active = (selectedAthlete.listType || 'agenciados') === list;
+                          return (
+                            <button
+                              key={list}
+                              type="button"
+                              onClick={() => { if (!active) setSelectedAthlete(selectedTwin); }}
+                              aria-pressed={active}
+                              className={`rounded-full px-3 py-1.5 transition ${active ? 'bg-primary text-background' : 'text-on-surface-variant hover:text-white'}`}
+                            >
+                              {list === 'agenciados' ? 'Agenciado' : 'Negociado'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
 

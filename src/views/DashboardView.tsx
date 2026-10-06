@@ -21,7 +21,6 @@ interface DashboardViewProps {
   athletes: Athlete[];
   games?: Game[];
   scoutEntries?: ScoutEntry[];
-  onAthletesClick?: () => void;
   onNavigate?: (view: View) => void;
   onOpenAthleteProfile?: (athlete: Athlete) => void;
   activities?: any[];
@@ -85,7 +84,7 @@ const describeActivity = (activity: any) => {
   }
 };
 
-export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthletesClick, onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
+export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
   // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
   const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
@@ -259,9 +258,9 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
   const topMinutes = featuredAthletes[0]?.minutes || 1;
 
   const statCards = [
-    { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: UserCheck, clickable: true, useLogo: true, targetView: 'athletes' as View },
-    { label: 'Atletas Negociados', val: negociadosCount.toString(), icon: Handshake, clickable: true, useBrand: true, targetView: 'negociados' as View },
-    { label: 'Atletas Totais', val: totalPeopleCount.toString(), icon: Users, clickable: true, usePeople: true, targetView: 'atletas-totais' as View }
+    { label: 'Atletas Agenciados', val: agenciadosCount.toString(), icon: UserCheck, useLogo: true, useBrand: false },
+    { label: 'Atletas Negociados', val: negociadosCount.toString(), icon: Handshake, useLogo: false, useBrand: true },
+    { label: 'Atletas Totais', val: totalPeopleCount.toString(), icon: Users, useLogo: false, useBrand: false }
   ];
 
   // Pelo id gravado na atividade; o nome serve só para atividades antigas sem athlete_id
@@ -280,24 +279,12 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
     <div className="mx-auto flex w-full max-w-[1600px] flex-col px-3 pb-12 pt-6 sm:px-6 sm:pt-10 lg:px-10">
       <section hidden={showNotifications} className="-order-2 grid grid-cols-3 gap-2 sm:gap-4">
         {statCards.map((stat, i) => (
-          <button
-            key={i}
-            type="button"
-            onClick={() => {
-              if (onNavigate) {
-                onNavigate(stat.targetView);
-                return;
-              }
-              if (onAthletesClick) {
-                onAthletesClick();
-              }
-            }}
-            className={`${panelClass} group relative overflow-hidden p-3 text-left transition hover:border-white/25 hover:bg-white/[0.06] sm:px-5 sm:py-4`}
-          >
+          // Só informação: os cards não são clicáveis
+          <div key={i} className={`${panelClass} relative overflow-hidden p-3 text-left sm:px-5 sm:py-4`}>
             <div className={topLineClass} />
             <div className="pointer-events-none absolute -right-12 -top-12 h-28 w-28 rounded-full bg-white/[0.07] blur-2xl" />
             {/* Marca da lista apagada ao fundo */}
-            <div className="pointer-events-none absolute -right-4 -top-2 opacity-5 transition-opacity group-hover:opacity-10 sm:bottom-3 sm:right-3 sm:top-auto">
+            <div className="pointer-events-none absolute -right-4 -top-2 opacity-5 sm:bottom-3 sm:right-3 sm:top-auto">
               {stat.useBrand ? (
                 <div className="flex items-center justify-center pr-6 translate-y-1.5 sm:pr-0">
                   <img
@@ -325,15 +312,14 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onAthle
             </div>
             {/* No celular os três cards ficam estreitos: sem o quadro do ícone, só o número e o nome */}
             <div className="relative flex items-center gap-3 max-sm:hidden">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white transition group-hover:border-primary group-hover:bg-primary group-hover:text-background">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/[0.04] text-white">
                 <stat.icon className="h-4 w-4" />
               </span>
               <p className={labelClass}>{stat.label}</p>
-              <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-on-surface-variant opacity-0 transition group-hover:opacity-100" />
             </div>
             <p className="relative text-3xl font-black italic leading-none tracking-tight text-white sm:mt-3 sm:text-4xl">{stat.val}</p>
             <p className="relative mt-1.5 text-[8px] font-black uppercase leading-tight tracking-[0.06em] text-on-surface-variant sm:hidden">{stat.label}</p>
-          </button>
+          </div>
         ))}
       </section>
 

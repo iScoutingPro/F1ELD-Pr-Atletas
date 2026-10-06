@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Plus, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Athlete } from '../types';
 import { findCountry } from '../countries';
@@ -9,10 +10,14 @@ import { Logo } from '../components/Logo';
 interface AtletasTotaisViewProps {
   athletes: Athlete[];
   onSelectAthlete?: (athlete: Athlete) => void;
+  // Só para admin: abre o cadastro na lista escolhida na pergunta do botão "Adicionar atleta"
+  onAddAthlete?: (list: ListType) => void;
+  // Filtro de lista com que a aba abre (os cards do painel abrem já em Agenciados ou Negociados)
+  initialListFilter?: ListFilter;
 }
 
 type ListType = 'agenciados' | 'negociados';
-type ListFilter = 'todos' | ListType | 'dvd';
+export type ListFilter = 'todos' | ListType | 'dvd';
 
 // Um cartão da tela: o atleta e as listas em que ele aparece
 interface Entry {
@@ -109,10 +114,11 @@ const Detail = ({ icon: Icon, label, muted, className = '', children }: { icon: 
 );
 
 // Marca da lista ao lado do nome: Field para Agenciados, Cosmopolitano Sports para Negociados
-const ListLogo: React.FC<{ list: ListType }> = ({ list }) => (
+// sizeClass troca o tamanho (a pergunta do "Adicionar atleta" usa uma marca maior que a do cartão)
+const ListLogo: React.FC<{ list: ListType; sizeClass?: string }> = ({ list, sizeClass = 'h-12 w-[68px] rounded-xl p-1 sm:h-16 sm:w-[104px]' }) => (
   <span
     title={list === 'negociados' ? 'Cosmopolitano Sports' : 'Field'}
-    className="flex h-12 w-[68px] shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 p-1 sm:h-16 sm:w-[104px]"
+    className={`flex shrink-0 items-center justify-center border border-white/10 bg-black/30 ${sizeClass}`}
   >
     {list === 'negociados' ? (
       <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
@@ -244,9 +250,74 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
   );
 };
 
-export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisViewProps) => {
+const ADD_OPTIONS: { list: ListType; label: string; brand: string }[] = [
+  { list: 'agenciados', label: 'Atleta Agenciado', brand: 'F1eld' },
+  { list: 'negociados', label: 'Atleta Negociado', brand: 'Cosmopolitano' },
+];
+
+// Pergunta do botão "Adicionar atleta": a lista escolhida aqui é a lista em que o atleta é cadastrado
+const AddAthleteDialog: React.FC<{ onPick: (list: ListType) => void; onClose: () => void }> = ({ onPick, onClose }) => {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div onClick={onClose} className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 px-4 backdrop-blur-md">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-athlete-title"
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-2xl overflow-hidden rounded-[32px] border border-white/10 bg-surface-low shadow-[0_30px_80px_rgba(0,0,0,0.8)]"
+      >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Fechar"
+          title="Fechar"
+          className="absolute right-3 top-3 z-30 flex h-9 w-9 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error transition hover:bg-error hover:text-white active:bg-error active:text-white"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="px-5 pb-5 pt-8 sm:px-10 sm:pb-10 sm:pt-10">
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-on-surface-variant/70 sm:text-xs">Adicionar atleta</p>
+          <h3 id="add-athlete-title" className="mt-3 pr-10 text-2xl font-black uppercase italic leading-tight tracking-tighter text-white sm:text-4xl">
+            O atleta é agenciado ou negociado?
+          </h3>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-5">
+            {ADD_OPTIONS.map(({ list, label, brand }) => (
+              <button
+                key={list}
+                type="button"
+                onClick={() => onPick(list)}
+                className="group flex flex-col items-center gap-4 rounded-3xl border border-white/10 bg-black/30 px-3 py-6 text-center sm:gap-6 sm:px-6 sm:py-10 transition duration-300 hover:-translate-y-0.5 hover:border-primary hover:bg-white/[0.06]"
+              >
+                <ListLogo list={list} sizeClass="h-16 w-[104px] rounded-2xl p-1.5 sm:h-28 sm:w-[190px] sm:p-3" />
+                <span>
+                  <span className="block text-xs font-black uppercase tracking-[0.12em] text-white sm:text-lg">{label}</span>
+                  <span className="mt-1 block text-[9px] font-black uppercase tracking-[0.24em] text-on-surface-variant/70 sm:mt-2 sm:text-xs">{brand}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete, initialListFilter = 'todos' }: AtletasTotaisViewProps) => {
   const [search, setSearch] = useState('');
-  const [listFilter, setListFilter] = useState<ListFilter>('todos');
+  const [listFilter, setListFilter] = useState<ListFilter>(initialListFilter);
+  const [askingList, setAskingList] = useState(false);
   const [category, setCategory] = useState('');
   const [position, setPosition] = useState('');
 
@@ -305,12 +376,24 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
       {/* Celular: só o título e o contador, para os cartões aparecerem logo; as contagens vão nos botões de lista */}
       <div className="flex items-end justify-between gap-3 sm:hidden">
         <h2 className="text-2xl font-black uppercase italic leading-none tracking-tighter text-white">
-          Atletas{' '}
-          <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">Totais</span>
+          Carteira{' '}
+          <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">de Atletas</span>
         </h2>
-        <p className="shrink-0 text-[10px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
-          <span className="text-primary">{filtered.length}</span> de {entries.length}
-        </p>
+        <div className="flex shrink-0 items-center gap-2.5">
+          <p className="text-[10px] font-black uppercase tracking-[0.14em] text-on-surface-variant">
+            <span className="text-primary">{filtered.length}</span> de {entries.length}
+          </p>
+          {onAddAthlete && (
+            <button
+              type="button"
+              onClick={() => setAskingList(true)}
+              aria-label="Adicionar atleta"
+              className="flex h-9 w-9 touch-manipulation items-center justify-center rounded-xl bg-primary text-background"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <motion.section
@@ -327,15 +410,27 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
           <div>
             <p className="flex items-center gap-3 text-[9px] font-black uppercase tracking-[0.34em] text-on-surface-variant">
               <span className="h-px w-6 bg-primary" />
-              Carteira completa
+              Agenciados e negociados
             </p>
             <h2 className="mt-2 text-2xl font-black uppercase italic leading-none tracking-tighter text-white sm:text-3xl md:text-4xl">
-              Atletas{' '}
-              <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">Totais</span>
+              Carteira{' '}
+              <span className="bg-gradient-to-r from-white/70 to-white/15 bg-clip-text pr-2 text-transparent">de Atletas</span>
             </h2>
           </div>
-          <div className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant backdrop-blur">
-            Exibindo <span className="text-primary">{filtered.length}</span> de {entries.length}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="rounded-full border border-white/10 bg-black/30 px-4 py-2 text-[10px] font-black uppercase tracking-[0.22em] text-on-surface-variant backdrop-blur">
+              Exibindo <span className="text-primary">{filtered.length}</span> de {entries.length}
+            </div>
+            {onAddAthlete && (
+              <button
+                type="button"
+                onClick={() => setAskingList(true)}
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-background shadow-[0_8px_24px_rgba(255,255,255,0.14)] transition hover:scale-[1.03]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Adicionar atleta
+              </button>
+            )}
           </div>
         </div>
 
@@ -434,6 +529,16 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete }: AtletasTotaisVi
             </button>
           )}
         </section>
+      )}
+
+      {askingList && onAddAthlete && (
+        <AddAthleteDialog
+          onClose={() => setAskingList(false)}
+          onPick={(list) => {
+            setAskingList(false);
+            onAddAthlete(list);
+          }}
+        />
       )}
     </div>
   );
