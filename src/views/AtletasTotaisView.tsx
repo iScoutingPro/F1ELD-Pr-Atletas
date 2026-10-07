@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUpRight, ChevronDown, FileText, LucideIcon, MapPin, Plus, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
+import { ArrowUpRight, ChevronDown, Disc3, FileText, LucideIcon, MapPin, Plus, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Athlete } from '../types';
 import { findCountry } from '../countries';
@@ -343,11 +343,11 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: A
       .sort((a, b) => fullName(a.athlete).localeCompare(fullName(b.athlete), 'pt-BR'));
   }, [entries, search, listFilter, category, position]);
 
-  const summary = [
-    { label: 'Atletas', value: entries.length },
-    { label: 'Agenciados', value: entries.filter(e => e.lists.includes('agenciados')).length },
-    { label: 'Negociados', value: entries.filter(e => e.lists.includes('negociados')).length },
-    { label: 'Com DVD', value: entries.filter(e => e.athlete.hasDvd).length },
+  const summary: { label: string; value: number; list?: ListType; icon?: LucideIcon }[] = [
+    { label: 'Atletas', value: entries.length, icon: Users },
+    { label: 'Agenciados', value: entries.filter(e => e.lists.includes('agenciados')).length, list: 'agenciados' },
+    { label: 'Negociados', value: entries.filter(e => e.lists.includes('negociados')).length, list: 'negociados' },
+    { label: 'Com DVD', value: entries.filter(e => e.athlete.hasDvd).length, icon: Disc3 },
   ];
 
   // Contagem mostrada em cada botão de lista no celular (no computador ela fica na faixa do topo)
@@ -432,13 +432,21 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: A
           </div>
         </div>
 
-        <div className="relative grid grid-cols-4 gap-px border-t border-white/10 bg-white/10">
-          {summary.map(({ label, value }) => (
-            <div key={label} className="bg-background/80 px-1 py-3 text-center backdrop-blur sm:px-8 sm:py-3.5 sm:text-left">
-              <p className="text-xl font-black italic leading-none tracking-tighter text-white sm:text-2xl">
-                {String(value).padStart(2, '0')}
-              </p>
-              <p className="mt-1 text-[8px] font-black uppercase tracking-[0.06em] text-on-surface-variant/70 sm:text-[9px] sm:tracking-[0.24em]">{label}</p>
+        <div className="relative grid grid-cols-4 divide-x divide-white/10 border-t border-white/10">
+          {summary.map(({ label, value, list, icon: Icon }) => (
+            <div key={label} className="flex items-center justify-between gap-3 bg-background/80 px-1 py-3 text-center backdrop-blur sm:px-8 sm:py-3.5 sm:text-left">
+              <div className="min-w-0">
+                <p className="text-xl font-black italic leading-none tracking-tighter text-white sm:text-2xl">
+                  {String(value).padStart(2, '0')}
+                </p>
+                <p className="mt-1 text-[8px] font-black uppercase tracking-[0.06em] text-on-surface-variant/70 sm:text-[9px] sm:tracking-[0.24em]">{label}</p>
+              </div>
+              {list && <ListLogo list={list} sizeClass="h-10 w-16 rounded-lg p-1" />}
+              {Icon && (
+                <span className="flex h-10 w-16 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/30">
+                  <Icon className="h-5 w-5 text-white" />
+                </span>
+              )}
             </div>
           ))}
         </div>
