@@ -145,14 +145,9 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
               <label className={labelClass}>Horário</label>
               <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={dateInputClass} />
             </div>
-            <div className="space-y-1">
-              <label className={labelClass}>Mandante *</label>
-              <input type="text" value={home} onChange={(e) => setHome(e.target.value)} className={inputClass} placeholder="Time da casa" />
-            </div>
-            <div className="space-y-1">
-              <label className={labelClass}>Visitante *</label>
-              <input type="text" value={away} onChange={(e) => setAway(e.target.value)} className={inputClass} placeholder="Time visitante" />
-            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-[1fr_1.5fr_1fr] [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Categoria</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
@@ -166,17 +161,26 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
               <label className={labelClass}>Competição</label>
               <input type="text" value={competition} onChange={(e) => setCompetition(e.target.value)} className={inputClass} placeholder="Ex.: Campeonato Paulista" />
             </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-[11rem_1fr] [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Rodada</label>
-              <input type="text" value={round} onChange={(e) => setRound(e.target.value)} className={inputClass} placeholder="Ex.: 3 ou Semi-Final" />
+              <input type="text" value={round} onChange={(e) => setRound(e.target.value)} className={inputClass} placeholder="Ex.: 3 ou Semi" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
+            <div className="space-y-1">
+              <label className={labelClass}>Mandante *</label>
+              <input type="text" value={home} onChange={(e) => setHome(e.target.value)} className={inputClass} placeholder="Time da casa" />
             </div>
             <div className="space-y-1">
-              <label className={labelClass}>Local</label>
-              <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputClass} placeholder="Estádio ou centro de treinamento" />
+              <label className={labelClass}>Visitante *</label>
+              <input type="text" value={away} onChange={(e) => setAway(e.target.value)} className={inputClass} placeholder="Time visitante" />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className={labelClass}>Local</label>
+            <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} className={inputClass} placeholder="Estádio ou centro de treinamento" />
           </div>
 
           <div className="space-y-2">

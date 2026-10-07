@@ -1,11 +1,18 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Users, UserCheck, Handshake, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, ArrowUpRight, CheckCheck, Trash2 } from 'lucide-react';
+import { Users, UserCheck, Handshake, Trophy, Clock3, Star, CalendarDays, MapPin, ChevronRight, ArrowUpRight, CheckCheck, Trash2, Medal } from 'lucide-react';
 import { Athlete, Game, ScoutEntry, View } from '../types';
 import { scoutMonthKey } from '../scout';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
 import { CATEGORIES } from '../categories';
+
+// Medalhas do Top 5, pedidas pelo usuário: ouro, prata e bronze para os três primeiros (única cor do painel)
+const MEDAL_TONES = [
+  'border-[#f5c542]/40 bg-[#f5c542]/15 text-[#f5c542]',
+  'border-[#cbd0d8]/40 bg-[#cbd0d8]/15 text-[#cbd0d8]',
+  'border-[#cd7f32]/40 bg-[#cd7f32]/15 text-[#cd7f32]',
+];
 
 // Mesmo padrão visual do resumo da aba Scout (ScoutOverview): painel em degradê com fio de luz no topo, quadro de ícone e linhas internas
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
@@ -83,80 +90,144 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
   const agenciadosCount = totalAthletes - negociadosCount;
   const totalPeopleCount = buildEntries(athletes).length;
 
-  // Minutagem real: soma da coluna Minutagem dos lançamentos de scout (aba "Scout").
-  // Minutos de atleta já apagado ficam de fora. O gráfico cobre os últimos 6 meses, separado por lista.
+  // Os dois gráficos do fim do painel cobrem os últimos 6 meses, separados por lista, e saem dos lançamentos de scout (aba "Scout"):
+  // a minutagem (soma da coluna Minutagem) e as convocações (um atleta numa partida, ou seja, um lançamento).
+  // Cada número é dividido em titular e reserva, na mesma regra da aba Scout: titular é quem tem Titular marcado; reserva é quem não é
+  // titular e tem Reserva ou Entrou marcado. Lançamento sem nenhuma dessas marcações conta no total, mas em nenhum dos dois.
+  // Lançamento de atleta já apagado fica de fora.
   const today = new Date();
-  const chartData = Array.from({ length: 6 }, (_, i) => {
+  const chartMonths = Array.from({ length: 6 }, (_, i) => {
     const month = new Date(today.getFullYear(), today.getMonth() - (5 - i), 1);
     return {
       key: `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`,
       label: month.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '').toUpperCase(),
-      field: 0,
-      cosmopolitano: 0,
     };
   });
+  const newSplit = () => ({ total: 0, starters: 0, reserves: 0 });
+  const newSplitPair = () => ({ field: newSplit(), cosmopolitano: newSplit() });
+  type SplitPair = ReturnType<typeof newSplitPair>;
+  // Por mês (para as barras) e somado nos 6 meses (para o número grande e o quadro ao lado)
+  const minutesByMonth = chartMonths.map(newSplitPair);
+  const minutesDetail = newSplitPair();
+  const calledByMonth = chartMonths.map(newSplitPair);
+  const calledDetail = newSplitPair();
   const athletesById = new Map(athletes.map(athlete => [athlete.id, athlete]));
   const minutesByAthlete = new Map<string, number>();
   scoutEntries.forEach(entry => {
     const athlete = athletesById.get(entry.athleteId);
-    const minutes = entry.stats.minutes;
-    if (!athlete || !(minutes > 0)) return;
-    minutesByAthlete.set(athlete.id, (minutesByAthlete.get(athlete.id) || 0) + minutes);
-    // Lançamento sem ano ou sem data reconhecível conta no Top 5, mas não entra no gráfico por mês
-    const month = chartData.find(item => item.key === scoutMonthKey(entry));
-    if (!month) return;
-    if (athlete.listType === 'negociados') month.cosmopolitano += minutes;
-    else month.field += minutes;
+    if (!athlete) return;
+    const minutes = entry.stats.minutes > 0 ? entry.stats.minutes : 0;
+    if (minutes > 0) minutesByAthlete.set(athlete.id, (minutesByAthlete.get(athlete.id) || 0) + minutes);
+    // Lançamento sem ano ou sem data reconhecível conta no Top 5, mas não entra nos gráficos por mês
+    const index = chartMonths.findIndex(item => item.key === scoutMonthKey(entry));
+    if (index < 0) return;
+    const series = athlete.listType === 'negociados' ? 'cosmopolitano' : 'field';
+    const role = entry.stats.starter > 0 ? 'starters' : entry.stats.bench > 0 || entry.stats.subIn > 0 ? 'reserves' : null;
+    const add = (count: ReturnType<typeof newSplit>, amount: number) => {
+      count.total += amount;
+      if (role) count[role] += amount;
+    };
+    add(minutesByMonth[index][series], minutes);
+    add(minutesDetail[series], minutes);
+    add(calledByMonth[index][series], 1);
+    add(calledDetail[series], 1);
   });
-  const chartTotal = chartData.reduce((acc, item) => acc + item.field + item.cosmopolitano, 0);
-  const chartMax = Math.max(1, ...chartData.map(item => Math.max(item.field, item.cosmopolitano)));
-  // Atletas relacionados em cada mês do gráfico, por lista: quem tem scout lançado no mês, cada atleta contado uma vez, e as convocações (um atleta numa partida)
-  const calledByMonth = chartData.map(() => ({ field: new Set<string>(), cosmopolitano: new Set<string>(), games: 0 }));
-  scoutEntries.forEach(entry => {
-    const athlete = athletesById.get(entry.athleteId);
-    const called = calledByMonth[chartData.findIndex(item => item.key === scoutMonthKey(entry))];
-    if (!athlete || !called) return;
-    called[athlete.listType === 'negociados' ? 'cosmopolitano' : 'field'].add(athlete.id);
-    called.games += 1;
-  });
-  const calledMax = Math.max(1, ...calledByMonth.map(month => Math.max(month.field.size, month.cosmopolitano.size)));
-  // No período, atleta relacionado em mais de um mês conta uma vez só
-  const calledBySeries = {
-    field: new Set(calledByMonth.flatMap(month => [...month.field])).size,
-    cosmopolitano: new Set(calledByMonth.flatMap(month => [...month.cosmopolitano])).size,
-  };
-  const calledTotal = calledBySeries.field + calledBySeries.cosmopolitano;
-  const minutesBySeries = {
-    field: chartData.reduce((acc, item) => acc + item.field, 0),
-    cosmopolitano: chartData.reduce((acc, item) => acc + item.cosmopolitano, 0),
-  };
   // Tons de cinza, como no resto do app: claro para F1eld e médio para Cosmopolitano
   const chartSeries = [
     { key: 'field' as const, label: 'F1eld (Agenciados)', barClass: 'bg-gradient-to-t from-zinc-300 to-white' },
     { key: 'cosmopolitano' as const, label: 'Cosmopolitano (Negociados)', barClass: 'bg-gradient-to-t from-zinc-600 to-zinc-400' },
   ];
-  // Legenda dos dois gráficos: o valor de cada lista, o total somando as duas e, se houver, uma linha a mais
-  const seriesLegend = (values: Record<'field' | 'cosmopolitano', number>, extra?: { label: string; value: number }) => (
-    <div className="min-w-[13.5rem] space-y-1.5">
-      {chartSeries.map((series) => (
-        <p key={series.key} className="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
-          <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${series.barClass}`} />
-          <span>{series.label}</span>
-          <span className="ml-auto pl-3 text-xs font-black text-white">{values[series.key].toLocaleString('pt-BR')}</span>
-        </p>
-      ))}
-      <p className="flex items-center gap-2 border-t border-white/10 pt-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-white">
-        <span>Total</span>
-        <span className="ml-auto pl-3 text-xs">{(values.field + values.cosmopolitano).toLocaleString('pt-BR')}</span>
-      </p>
-      {extra && (
-        <p className="flex items-center gap-2 text-[10px] font-bold text-on-surface-variant">
-          <span>{extra.label}</span>
-          <span className="ml-auto pl-3 text-xs font-black text-white">{extra.value.toLocaleString('pt-BR')}</span>
-        </p>
-      )}
-    </div>
-  );
+  // Os dois painéis têm o mesmo desenho: número grande do período, quadro com uma linha por lista (total, titular e reserva)
+  // e duas barras lisas por mês, na cor da lista. A pedido do usuário a barra não é dividida em titular e reserva (ele não gostou
+  // nem do tom apagado nem das listras): essa divisão fica no quadro e no texto que aparece ao passar o mouse
+  const splitPanel = (config: {
+    title: string;
+    icon: React.ReactNode;
+    column: string;
+    shortColumn?: string;
+    unit: (value: number) => string;
+    empty: string;
+    byMonth: SplitPair[];
+    detail: SplitPair;
+  }) => {
+    const { byMonth, detail } = config;
+    const format = (value: number) => value.toLocaleString('pt-BR');
+    const periodTotal = detail.field.total + detail.cosmopolitano.total;
+    const max = Math.max(1, ...byMonth.map(month => Math.max(month.field.total, month.cosmopolitano.total)));
+    return (
+      <div className={`${panelClass} relative min-w-0 overflow-hidden p-4 sm:p-6`}>
+        <div className={topLineClass} />
+        <div className="mb-5 min-w-0">
+          <p className={labelClass}>Últimos 6 meses</p>
+          <h3 className={`${titleClass} break-words`}>{config.title}</h3>
+        </div>
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex items-center gap-3">
+            <span className={iconFrameClass}>{config.icon}</span>
+            <p className="text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">
+              {format(periodTotal)} <span className="text-sm not-italic text-on-surface-variant">{config.unit(periodTotal)}</span>
+            </p>
+          </div>
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(3,auto)] items-center gap-x-3 gap-y-1.5 sm:gap-x-4">
+            <span />
+            {[config.column, 'Titular', 'Reserva'].map((header, column) => (
+              <span key={header} className="text-right text-[8px] font-black uppercase tracking-[0.12em] text-on-surface-variant sm:text-[9px]">
+                {column === 0 && config.shortColumn ? <><span className="sm:hidden">{config.shortColumn}</span><span className="max-sm:hidden">{header}</span></> : header}
+              </span>
+            ))}
+            {chartSeries.map((series) => (
+              <React.Fragment key={series.key}>
+                <p className="flex min-w-0 items-center gap-2 text-[10px] font-bold text-on-surface-variant">
+                  <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${series.barClass}`} />
+                  <span className="truncate">{series.label}</span>
+                </p>
+                {[detail[series.key].total, detail[series.key].starters, detail[series.key].reserves].map((value, column) => (
+                  <span key={column} className="text-right text-xs font-black text-white">{format(value)}</span>
+                ))}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {periodTotal === 0 ? (
+          <p className="mt-6 text-sm text-white/70">{config.empty}</p>
+        ) : (
+            <div className="relative mt-6 flex gap-1.5 sm:gap-3">
+              {/* Linhas de referência atrás das colunas */}
+              <div className="pointer-events-none absolute inset-x-0 top-5 h-36">
+                {[0, 50, 100].map((mark) => <div key={mark} className="absolute inset-x-0 border-t border-dashed border-white/[0.07]" style={{ top: `${mark}%` }} />)}
+              </div>
+              {chartMonths.map((item, index) => {
+                const month = byMonth[index];
+                const monthTotal = month.field.total + month.cosmopolitano.total;
+                return (
+                  <div key={item.key} className="relative flex min-w-0 flex-1 flex-col items-center">
+                    <span className={`h-5 text-xs font-black leading-none ${monthTotal > 0 ? 'text-white' : 'text-white/25'}`}>{format(monthTotal)}</span>
+                    <div className="flex h-36 w-full items-end justify-center gap-1 border-b border-white/15">
+                      {chartSeries.map((series) => {
+                        const { total, starters, reserves } = month[series.key];
+                        const unmarked = total - starters - reserves;
+                        return (
+                          <motion.div
+                            key={series.key}
+                            initial={{ height: 0 }}
+                            animate={{ height: `${(total / max) * 100}%` }}
+                            transition={{ duration: 0.7, delay: index * 0.08 }}
+                            title={`${series.label} em ${item.label}: ${format(total)} ${config.unit(total)}, ${format(starters)} como titular e ${format(reserves)} como reserva${unmarked > 0 ? `, ${format(unmarked)} sem marcação` : ''}`}
+                            className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
+                          />
+                        );
+                      })}
+                    </div>
+                    <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.16em] ${monthTotal > 0 ? 'text-white' : 'text-on-surface-variant'}`}>{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+        )}
+      </div>
+    );
+  };
 
   // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
   const notifications = activities.map((activity, index) => {
@@ -326,7 +397,14 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
               {featuredAthletes.map((athlete, index) => (
                 <div key={athlete.id} className={`${rowClass} p-3`}>
                   <div className="flex items-center gap-3">
-                    <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-[10px] font-black ${index === 0 ? 'border-primary bg-primary text-background' : 'border-white/15 bg-white/[0.04] text-on-surface-variant'}`}>{index + 1}</span>
+                    {/* Os três primeiros ganham medalha (ouro, prata e bronze); do quarto em diante fica o número */}
+                    {MEDAL_TONES[index] ? (
+                      <span title={`${index + 1}º lugar`} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border ${MEDAL_TONES[index]}`}>
+                        <Medal className="h-4 w-4" />
+                      </span>
+                    ) : (
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/[0.04] text-[10px] font-black text-on-surface-variant">{index + 1}</span>
+                    )}
                     <img src={athlete.image} alt={athlete.name} className="h-11 w-11 shrink-0 rounded-full object-cover ring-1 ring-white/15" referrerPolicy="no-referrer" />
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-black uppercase italic text-white">{athlete.name} {athlete.lastName}</p>
@@ -470,120 +548,25 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
         <div>
           {/* Dois painéis lado a lado, cada um completo (título, número do período, legenda e colunas), para não misturar minutos com atletas */}
           <div className="grid gap-3 sm:gap-5 xl:grid-cols-2">
-            {/* Minutagem por mês, separada por lista */}
-            <div className={`${panelClass} relative min-w-0 overflow-hidden p-4 sm:p-6`}>
-              <div className={topLineClass} />
-              <div className="mb-5 min-w-0">
-                <p className={labelClass}>Performance · últimos 6 meses</p>
-                <h3 className={`${titleClass} break-words`}>Minutagem Atletas F1eld/Cosmopolitano</h3>
-              </div>
-              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-                <div className="flex items-center gap-3">
-                  <span className={iconFrameClass}>
-                    <Clock3 className="h-[18px] w-[18px]" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Total do período</p>
-                    <p className="mt-1.5 text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">
-                      {chartTotal.toLocaleString('pt-BR')} <span className="text-sm not-italic text-on-surface-variant">min</span>
-                    </p>
-                  </div>
-                </div>
-                {seriesLegend(minutesBySeries)}
-              </div>
-
-              {chartTotal === 0 ? (
-                <p className="mt-6 text-sm text-white/70">Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.</p>
-              ) : (
-                <div className="relative mt-6 flex gap-1.5 sm:gap-3">
-                  {/* Linhas de referência atrás das colunas */}
-                  <div className="pointer-events-none absolute inset-x-0 top-5 h-36">
-                    {[0, 50, 100].map((mark) => <div key={mark} className="absolute inset-x-0 border-t border-dashed border-white/[0.07]" style={{ top: `${mark}%` }} />)}
-                  </div>
-                  {chartData.map((item, index) => {
-                    const monthTotal = item.field + item.cosmopolitano;
-                    return (
-                      <div key={item.key} className="relative flex min-w-0 flex-1 flex-col items-center">
-                        <span className={`h-5 text-xs font-black leading-none ${monthTotal > 0 ? 'text-white' : 'text-white/25'}`}>{monthTotal.toLocaleString('pt-BR')}</span>
-                        <div className="flex h-36 w-full items-end justify-center gap-1 border-b border-white/15">
-                          {chartSeries.map((series) => (
-                            <motion.div
-                              key={series.key}
-                              initial={{ height: 0 }}
-                              animate={{ height: `${(item[series.key] / chartMax) * 100}%` }}
-                              transition={{ duration: 0.7, delay: index * 0.08 }}
-                              title={`${series.label}: ${item[series.key].toLocaleString('pt-BR')} min`}
-                              className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
-                            />
-                          ))}
-                        </div>
-                        <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.16em] ${monthTotal > 0 ? 'text-white' : 'text-on-surface-variant'}`}>{item.label}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Atletas relacionados por mês (o mesmo número da aba Scout): atletas com scout lançado no mês, cada um contado uma vez */}
-            <div className={`${panelClass} relative min-w-0 overflow-hidden p-4 sm:p-6`}>
-              <div className={topLineClass} />
-              <div className="mb-5 min-w-0">
-                <p className={labelClass}>Convocações · últimos 6 meses</p>
-                <h3 className={`${titleClass} break-words`}>Atletas Relacionados F1eld/Cosmopolitano</h3>
-              </div>
-              <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
-                <div className="flex items-center gap-3">
-                  <span className={iconFrameClass}>
-                    <Users className="h-[18px] w-[18px]" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Total do período</p>
-                    <p className="mt-1.5 text-3xl font-black italic leading-none tracking-tight text-white sm:text-4xl">
-                      {calledTotal} <span className="text-sm not-italic text-on-surface-variant">{calledTotal === 1 ? 'atleta' : 'atletas'}</span>
-                    </p>
-                  </div>
-                </div>
-                {seriesLegend(calledBySeries)}
-              </div>
-
-              {calledTotal === 0 ? (
-                <p className="mt-6 text-sm text-white/70">Nenhum scout lançado nos últimos 6 meses.</p>
-              ) : (
-                <div className="relative mt-6 flex gap-1.5 sm:gap-3">
-                  <div className="pointer-events-none absolute inset-x-0 top-5 h-36">
-                    {[0, 50, 100].map((mark) => <div key={mark} className="absolute inset-x-0 border-t border-dashed border-white/[0.07]" style={{ top: `${mark}%` }} />)}
-                  </div>
-                  {chartData.map((item, index) => {
-                    const called = calledByMonth[index];
-                    const count = called.field.size + called.cosmopolitano.size;
-                    return (
-                      <div
-                        key={item.key}
-                        className="relative flex min-w-0 flex-1 flex-col items-center"
-                        title={`${item.label}: ${count} ${count === 1 ? 'atleta relacionado' : 'atletas relacionados'} em ${called.games} ${called.games === 1 ? 'convocação' : 'convocações'}`}
-                      >
-                        <span className={`h-5 text-xs font-black leading-none ${count > 0 ? 'text-white' : 'text-white/25'}`}>{count}</span>
-                        <div className="flex h-36 w-full items-end justify-center gap-1 border-b border-white/15">
-                          {chartSeries.map((series) => (
-                            <motion.div
-                              key={series.key}
-                              initial={{ height: 0 }}
-                              animate={{ height: `${(called[series.key].size / calledMax) * 100}%` }}
-                              transition={{ duration: 0.7, delay: index * 0.08 }}
-                              title={`${series.label}: ${called[series.key].size}`}
-                              className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
-                            />
-                          ))}
-                        </div>
-                        <span className={`mt-2 text-[9px] font-black uppercase tracking-[0.16em] ${count > 0 ? 'text-white' : 'text-on-surface-variant'}`}>{item.label}</span>
-                        <span className="mt-1 truncate text-[9px] font-bold leading-none text-on-surface-variant">{called.games} conv.</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+            {splitPanel({
+              title: 'Minutagem',
+              icon: <Clock3 className="h-[18px] w-[18px]" />,
+              column: 'Minutos',
+              unit: () => 'min',
+              empty: 'Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.',
+              byMonth: minutesByMonth,
+              detail: minutesDetail,
+            })}
+            {splitPanel({
+              title: 'Relação Relacionados - Titular/Reserva',
+              icon: <Users className="h-[18px] w-[18px]" />,
+              column: 'Convocações',
+              shortColumn: 'Conv.',
+              unit: (value) => (value === 1 ? 'convocação' : 'convocações'),
+              empty: 'Nenhum scout lançado nos últimos 6 meses.',
+              byMonth: calledByMonth,
+              detail: calledDetail,
+            })}
           </div>
         </div>
       </section>
