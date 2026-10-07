@@ -145,12 +145,14 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
     icon: React.ReactNode;
     column: string;
     shortColumn?: string;
+    // Colunas Titular e Reserva do quadro (e do texto ao passar o mouse); a minutagem não tem, a pedido do usuário
+    split: boolean;
     unit: (value: number) => string;
     empty: string;
     byMonth: SplitPair[];
     detail: SplitPair;
   }) => {
-    const { byMonth, detail } = config;
+    const { byMonth, detail, split } = config;
     const format = (value: number) => value.toLocaleString('pt-BR');
     const periodTotal = detail.field.total + detail.cosmopolitano.total;
     const max = Math.max(1, ...byMonth.map(month => Math.max(month.field.total, month.cosmopolitano.total)));
@@ -168,9 +170,9 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
               {format(periodTotal)} <span className="text-sm not-italic text-on-surface-variant">{config.unit(periodTotal)}</span>
             </p>
           </div>
-          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(3,auto)] items-center gap-x-3 gap-y-1.5 sm:gap-x-4">
+          <div className={`grid min-w-0 ${split ? 'grid-cols-[minmax(0,1fr)_repeat(3,auto)]' : 'grid-cols-[minmax(0,1fr)_auto]'} items-center gap-x-3 gap-y-1.5 sm:gap-x-4`}>
             <span />
-            {[config.column, 'Titular', 'Reserva'].map((header, column) => (
+            {(split ? [config.column, 'Titular', 'Reserva'] : [config.column]).map((header, column) => (
               <span key={header} className="text-right text-[8px] font-black uppercase tracking-[0.12em] text-on-surface-variant sm:text-[9px]">
                 {column === 0 && config.shortColumn ? <><span className="sm:hidden">{config.shortColumn}</span><span className="max-sm:hidden">{header}</span></> : header}
               </span>
@@ -181,7 +183,7 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
                   <span className={`h-2.5 w-2.5 shrink-0 rounded-sm ${series.barClass}`} />
                   <span className="truncate">{series.label}</span>
                 </p>
-                {[detail[series.key].total, detail[series.key].starters, detail[series.key].reserves].map((value, column) => (
+                {(split ? [detail[series.key].total, detail[series.key].starters, detail[series.key].reserves] : [detail[series.key].total]).map((value, column) => (
                   <span key={column} className="text-right text-xs font-black text-white">{format(value)}</span>
                 ))}
               </React.Fragment>
@@ -213,7 +215,7 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
                             initial={{ height: 0 }}
                             animate={{ height: `${(total / max) * 100}%` }}
                             transition={{ duration: 0.7, delay: index * 0.08 }}
-                            title={`${series.label} em ${item.label}: ${format(total)} ${config.unit(total)}, ${format(starters)} como titular e ${format(reserves)} como reserva${unmarked > 0 ? `, ${format(unmarked)} sem marcação` : ''}`}
+                            title={`${series.label} em ${item.label}: ${format(total)} ${config.unit(total)}${split ? `, ${format(starters)} como titular e ${format(reserves)} como reserva${unmarked > 0 ? `, ${format(unmarked)} sem marcação` : ''}` : ''}`}
                             className={`w-full max-w-8 rounded-t-lg ${series.barClass}`}
                           />
                         );
@@ -552,6 +554,7 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
               title: 'Minutagem',
               icon: <Clock3 className="h-[18px] w-[18px]" />,
               column: 'Minutos',
+              split: false,
               unit: () => 'min',
               empty: 'Nenhuma minutagem cadastrada nos últimos 6 meses. Lance a minutagem de cada atleta na aba Scout.',
               byMonth: minutesByMonth,
@@ -561,6 +564,7 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
               title: 'Relação Relacionados - Titular/Reserva',
               icon: <Users className="h-[18px] w-[18px]" />,
               column: 'Convocações',
+              split: true,
               shortColumn: 'Conv.',
               unit: (value) => (value === 1 ? 'convocação' : 'convocações'),
               empty: 'Nenhum scout lançado nos últimos 6 meses.',

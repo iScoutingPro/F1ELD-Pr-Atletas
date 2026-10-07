@@ -44,6 +44,8 @@ export interface Athlete {
   loanClub?: string;
   loanStart?: string;
   loanEnd?: string;
+  // Arquivo do contrato de empréstimo, no mesmo bucket "contracts"
+  loanContractFile?: string;
   contractGoals?: ContractGoal[];
   tacticalMeetings?: TacticalMeeting[];
   notes?: string;

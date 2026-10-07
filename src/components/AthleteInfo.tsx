@@ -74,9 +74,9 @@ const ContactCard = ({ label, phone }: { label: string; phone?: string }) => pho
   </div>
 );
 
-// onOpenContract: abre dentro do app o arquivo de contrato enviado pelo formulário
+// onOpenContract e onOpenLoanContract: abrem dentro do app o arquivo do contrato e o do contrato de empréstimo, enviados pelo formulário
 // clubLogoOf: escudo de um clube pelo nome (o do próprio atleta ou o de outro atleta cadastrado no mesmo clube)
-export const AthleteInfo =({ athlete, onOpenContract, clubLogoOf }: { athlete: Athlete; onOpenContract?: () => void; clubLogoOf?: (club?: string) => string | undefined }) => {
+export const AthleteInfo =({ athlete, onOpenContract, onOpenLoanContract, clubLogoOf }: { athlete: Athlete; onOpenContract?: () => void; onOpenLoanContract?: () => void; clubLogoOf?: (club?: string) => string | undefined }) => {
   // Em Negociados, empresário com empresa ou nome aparece no cartão do empresário (com o WhatsApp);
   // só com o WhatsApp, aparece como terceiro contato
   const isNegociado = athlete.listType === 'negociados';
@@ -247,9 +247,21 @@ export const AthleteInfo =({ athlete, onOpenContract, clubLogoOf }: { athlete: A
                 </div>
                 {loanLogo && <img src={loanLogo} alt="" className="h-12 w-12 shrink-0 object-contain mix-blend-screen" />}
               </div>
+              <div className="flex items-center gap-3">
               <span className={`rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] ${loanLeft?.expired ? 'border-error/30 bg-error/10 text-error' : 'border-primary/30 bg-primary/10 text-primary'}`}>
                 {loanLeft?.expired ? 'Empréstimo encerrado' : loanPending ? 'Empréstimo agendado' : 'Em empréstimo'}
               </span>
+                {athlete.loanContractFile && onOpenLoanContract && (
+                  <button
+                    type="button"
+                    onClick={onOpenLoanContract}
+                    className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Abrir contrato
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="mt-6 flex items-end justify-between gap-4">

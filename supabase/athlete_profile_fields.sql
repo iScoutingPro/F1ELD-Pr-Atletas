@@ -33,6 +33,7 @@ alter table public.athletes
   add column if not exists loan_club text,
   add column if not exists loan_start date,
   add column if not exists loan_end date,
+  add column if not exists loan_contract_file text,
   add column if not exists contract_goals jsonb,
   add column if not exists tactical_meetings jsonb,
   add column if not exists notes text,

@@ -209,6 +209,7 @@ const mapAthleteRow = (a: any): Athlete => ({
   loanClub: a.loan_club,
   loanStart: a.loan_start,
   loanEnd: a.loan_end,
+  loanContractFile: a.loan_contract_file || undefined,
   contractGoals: a.contract_goals || [],
   tacticalMeetings: (Array.isArray(a.tactical_meetings) ? a.tactical_meetings : []).map((m: TacticalMeeting) => ({ ...m, materials: m.materials || [] })),
   source: a.source || 'Captado',
@@ -267,13 +268,19 @@ export default function App() {
     const key = clubKey(club || '');
     return key ? registryLogos.get(key) || athleteLogos.get(key) : undefined;
   };
-  // Só para atleta vindo do banco (mapAthleteRow): aplicar de novo trocaria o escudo próprio pelo do cadastro
-  const enrichAthlete = (athlete: Athlete): Athlete => ({
-    ...athlete,
-    ownClubLogo: athlete.clubLogo,
-    clubLogo: resolveClubLogo(athlete.club) || athlete.clubLogo,
-    loanClubLogo: resolveClubLogo(athlete.loanClub),
-  });
+  // Só para atleta vindo do banco (mapAthleteRow): aplicar de novo trocaria o escudo próprio pelo do cadastro.
+  // Em Negociados o clube do atleta é o Clube do Contrato (regra do usuário); o empréstimo em vigor troca o clube só na exibição (activeLoanClub)
+  const enrichAthlete = (athlete: Athlete): Athlete => {
+    const contractClub = athlete.listType === 'negociados' ? (athlete.contractClub || '').trim() : '';
+    const club = contractClub || athlete.club;
+    return {
+      ...athlete,
+      club,
+      ownClubLogo: athlete.clubLogo,
+      clubLogo: resolveClubLogo(club) || (clubKey(club) === clubKey(athlete.club) ? athlete.clubLogo : undefined),
+      loanClubLogo: resolveClubLogo(athlete.loanClub),
+    };
+  };
   const athletes = useMemo(() => rawAthletes.map(enrichAthlete), [rawAthletes, registryLogos, athleteLogos]);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
@@ -724,8 +731,8 @@ export default function App() {
 
   const navigateTo = (next: View) => setView(next);
 
-  // contractUpload: arquivo de contrato escolhido no formulário, enviado ao Storage antes de gravar o atleta
-  const handleSaveAthlete = async (athleteData: Partial<Athlete>, contractUpload?: File) => {
+  // contractUpload e loanUpload: arquivos do contrato e do contrato de empréstimo escolhidos no formulário, enviados ao Storage antes de gravar o atleta
+  const handleSaveAthlete = async (athleteData: Partial<Athlete>, contractUpload?: File, loanUpload?: File) => {
     if (!isAdmin) {
       setNotice(notAllowedMessage(selectedAthlete ? 'editar' : 'cadastrar'));
       return;
@@ -851,6 +858,8 @@ export default function App() {
         loan_start: athleteData.loanStart || null,
         loan_end: athleteData.loanEnd || null,
       } : {}),
+      // Arquivo do contrato de empréstimo: mesma regra do arquivo do contrato
+      ...(athleteData.loanContractFile || selectedAthlete?.loanContractFile ? { loan_contract_file: athleteData.loanContractFile || null } : {}),
       notes: athleteData.notes,
       has_dvd: athleteData.hasDvd,
       dvd_link: athleteData.dvdLink,
@@ -861,21 +870,23 @@ export default function App() {
 
     let error: any = null;
 
-    // Envia o arquivo do contrato primeiro; se o envio falhar, nada é gravado
-    let uploadedFile = '';
+    // Envia os arquivos (contrato e contrato de empréstimo) primeiro; se algum envio falhar, nada é gravado
+    const uploadedFiles: string[] = [];
     // Linha devolvida pelo banco na edição: é com ela que o perfil reabre depois de salvar
     let savedRow: any = null;
-    if (contractUpload) {
-      const safeName = contractUpload.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '-');
+    for (const [file, column] of [[contractUpload, 'contract_file'], [loanUpload, 'loan_contract_file']] as const) {
+      if (!file) continue;
+      const safeName = file.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '-');
       const path = `${crypto.randomUUID()}/${safeName}`;
-      const { error: uploadError } = await supabase.storage.from(CONTRACT_BUCKET).upload(path, contractUpload, { contentType: contractUpload.type || undefined });
+      const { error: uploadError } = await supabase.storage.from(CONTRACT_BUCKET).upload(path, file, { contentType: file.type || undefined });
       if (uploadError) {
+        if (uploadedFiles.length) supabase.storage.from(CONTRACT_BUCKET).remove(uploadedFiles);
         setNotice(contractFileNotice('Erro ao enviar o contrato', uploadError));
         setLoading(false);
         return;
       }
-      uploadedFile = path;
-      Object.assign(payload, { contract_file: path });
+      uploadedFiles.push(path);
+      Object.assign(payload, { [column]: path });
     }
     
     const isEditingRealAthlete = selectedAthlete && 
@@ -933,7 +944,7 @@ export default function App() {
     if (error) {
       console.error('Erro ao salvar atleta:', error);
       // O atleta não foi gravado: o arquivo enviado agora não fica sobrando no Storage
-      if (uploadedFile) supabase.storage.from(CONTRACT_BUCKET).remove([uploadedFile]);
+      if (uploadedFiles.length) supabase.storage.from(CONTRACT_BUCKET).remove(uploadedFiles);
       if (error.code === RLS_VIOLATION_CODE) {
         setNotice(notAllowedMessage(isEditingRealAthlete ? 'editar' : 'cadastrar'));
       } else {
@@ -942,9 +953,13 @@ export default function App() {
     } else {
       console.log('Atleta salvo com sucesso!');
       // Arquivo antigo trocado ou removido: apaga do Storage (se falhar, só fica sobrando lá)
-      const oldFile = selectedAthlete?.contractFile;
-      if (oldFile && oldFile !== (uploadedFile || athleteData.contractFile || '')) {
-        supabase.storage.from(CONTRACT_BUCKET).remove([oldFile]).then(({ error: removeError }) => {
+      const payloadFiles = payload as { contract_file?: string | null; loan_contract_file?: string | null };
+      const oldFiles = [
+        [selectedAthlete?.contractFile, payloadFiles.contract_file],
+        [selectedAthlete?.loanContractFile, payloadFiles.loan_contract_file],
+      ].filter(([oldFile, newFile]) => oldFile && oldFile !== (newFile || '')).map(([oldFile]) => oldFile as string);
+      if (oldFiles.length) {
+        supabase.storage.from(CONTRACT_BUCKET).remove(oldFiles).then(({ error: removeError }) => {
           if (removeError) console.error('Erro ao apagar o arquivo antigo do contrato:', removeError);
         });
       }
@@ -969,13 +984,14 @@ export default function App() {
   };
 
   // Abre o arquivo do contrato dentro do app: o bucket é privado, então o endereço é temporário (1 hora)
-  const openContractFile = async (athlete: Athlete) => {
-    if (!athlete.contractFile || !supabase) return;
-    const name = contractFileName(athlete.contractFile);
+  // path: caminho do arquivo no bucket (o do contrato ou o do contrato de empréstimo)
+  const openContractFile = async (path?: string) => {
+    if (!path || !supabase) return;
+    const name = contractFileName(path);
     const storage = supabase.storage.from(CONTRACT_BUCKET);
     const [view, download] = await Promise.all([
-      storage.createSignedUrl(athlete.contractFile, 3600),
-      storage.createSignedUrl(athlete.contractFile, 3600, { download: name }),
+      storage.createSignedUrl(path, 3600),
+      storage.createSignedUrl(path, 3600, { download: name }),
     ]);
     if (view.error || !view.data) {
       setNotice(contractFileNotice('Erro ao abrir o contrato', view.error || { message: 'Arquivo não encontrado.' }));
@@ -985,10 +1001,10 @@ export default function App() {
   };
 
   // Baixa o arquivo do contrato direto, sem abrir a janela de visualização
-  const downloadContractFile = async (athlete: Athlete) => {
-    if (!athlete.contractFile || !supabase) return;
-    const name = contractFileName(athlete.contractFile);
-    const { data, error } = await supabase.storage.from(CONTRACT_BUCKET).createSignedUrl(athlete.contractFile, 3600, { download: name });
+  const downloadContractFile = async (path?: string) => {
+    if (!path || !supabase) return;
+    const name = contractFileName(path);
+    const { data, error } = await supabase.storage.from(CONTRACT_BUCKET).createSignedUrl(path, 3600, { download: name });
     if (error || !data) {
       setNotice(contractFileNotice('Erro ao baixar o contrato', error || { message: 'Arquivo não encontrado.' }));
       return;
@@ -1123,8 +1139,8 @@ export default function App() {
         return;
       }
       console.log('Atleta apagado do banco com sucesso');
-      const deletedFile = deletedData[0]?.contract_file;
-      if (deletedFile) supabase.storage.from(CONTRACT_BUCKET).remove([deletedFile]);
+      const deletedFiles = [deletedData[0]?.contract_file, deletedData[0]?.loan_contract_file].filter(Boolean);
+      if (deletedFiles.length) supabase.storage.from(CONTRACT_BUCKET).remove(deletedFiles);
     } else {
       console.log('ID não é UUID, removendo apenas localmente');
     }
@@ -1497,6 +1513,7 @@ export default function App() {
           onSaveGame={isAdmin ? handleSaveGame : undefined}
           onDeleteGame={isAdmin ? handleDeleteGame : undefined}
           clubLogoOf={resolveClubLogo}
+          clubs={allClubs}
         />
       );
       // Só admin lança scout; os demais caem no painel (default)
@@ -1659,13 +1676,13 @@ export default function App() {
                   entries={scoutEntriesOf(selectedAthlete)}
                   isAdmin={isAdmin}
                   onSaveGoals={(goals) => handleSaveContractGoals(selectedAthlete, goals)}
-                  onOpenContract={() => openContractFile(selectedAthlete)}
-                  onDownloadContract={() => downloadContractFile(selectedAthlete)}
+                  onOpenContract={() => openContractFile(selectedAthlete.contractFile)}
+                  onDownloadContract={() => downloadContractFile(selectedAthlete.contractFile)}
                 />
               ) : profileDetailView === 'pdf' ? (
                 <AthletePdf athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} games={games} />
               ) : (
-                <AthleteInfo athlete={selectedAthlete} onOpenContract={() => openContractFile(selectedAthlete)} clubLogoOf={resolveClubLogo} />
+                <AthleteInfo athlete={selectedAthlete} onOpenContract={() => openContractFile(selectedAthlete.contractFile)} onOpenLoanContract={() => openContractFile(selectedAthlete.loanContractFile)} clubLogoOf={resolveClubLogo} />
               )}
               </Suspense>
             </div>

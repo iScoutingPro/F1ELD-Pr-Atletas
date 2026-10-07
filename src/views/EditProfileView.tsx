@@ -5,7 +5,8 @@ import { ArrowLeft, Camera, FileText, Trash2, Upload } from 'lucide-react';
 import { Athlete } from '../types';
 import { CountrySelect } from '../components/CountrySelect';
 import { ImageCropper } from '../components/ImageCropper';
-import { SheetSelect, SheetOption, normalize } from '../components/SheetSelect';
+import { ClubPicker } from '../components/ClubPicker';
+import { normalize } from '../components/SheetSelect';
 import { NATIONALITY_COUNTRIES, SECOND_NATIONALITY_COUNTRIES } from '../countries';
 import { CATEGORIES } from '../categories';
 import { Club, clubKey, clubLogoMap } from '../clubs';
@@ -58,31 +59,57 @@ const toHeightCm = (value?: string) => {
   return parsed < 10 ? Math.round(parsed * 100) : Math.round(parsed);
 };
 
-// Clube escolhido entre os já cadastrados, ou digitado em "Outro"
-const ClubPicker = ({ value, options, onChange, label }: { value: string; options: SheetOption[]; onChange: (value: string) => void; label: string }) => {
-  const [typing, setTyping] = useState(false);
-  return typing ? (
-    <input
-      type="text"
-      autoFocus
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={() => setTyping(false)}
-      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-      className={inputClass}
-      placeholder="Nome do clube"
-    />
-  ) : (
-    <SheetSelect
-      value={value}
-      options={options}
-      onChange={onChange}
-      onOther={() => { onChange(''); setTyping(true); }}
-      otherLabel="Outro"
-      label={label}
-      placeholder="Selecione o clube"
-      className="h-[50px] w-full rounded-xl border bg-surface-high px-4 text-sm font-bold transition"
-    />
+// Campo de arquivo de contrato (o do contrato e o do contrato de empréstimo): mostra o arquivo já gravado ou o escolhido agora,
+// que só é enviado ao salvar o atleta. saved é o caminho no Storage; upload, o arquivo novo
+const ContractFileField = ({ label, saved, upload, onPick, onRemove }: { label: string; saved: string; upload: File | null; onPick: (file: File) => void; onRemove: () => void }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
+  const fileLabel = upload?.name || contractFileName(saved);
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > MAX_CONTRACT_MB * 1024 * 1024) {
+      setError(`O arquivo passa de ${MAX_CONTRACT_MB} MB. Escolha um arquivo menor.`);
+      return;
+    }
+    setError('');
+    onPick(file);
+  };
+  return (
+    <div className="space-y-1">
+      <label className={labelClass}>{label}</label>
+      <input type="file" ref={inputRef} className="hidden" accept="application/pdf,image/png,image/jpeg,image/webp" onChange={pick} />
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-surface-high px-4 py-3">
+        <FileText className={`h-4 w-4 shrink-0 ${fileLabel ? 'text-white' : 'text-on-surface-variant/50'}`} />
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-sm font-bold ${fileLabel ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>
+            {fileLabel || 'Nenhum arquivo enviado'}
+          </p>
+          {upload && <p className="text-xs font-medium text-on-surface-variant">Será enviado ao salvar o atleta.</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-4 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {fileLabel ? 'Trocar arquivo' : 'Enviar arquivo'}
+        </button>
+        {fileLabel && (
+          <button
+            type="button"
+            onClick={() => { setError(''); onRemove(); }}
+            className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant transition hover:border-error/50 hover:text-error"
+          >
+            Remover
+          </button>
+        )}
+      </div>
+      {error
+        ? <p className="ml-1 pt-1 text-xs font-bold text-error">{error}</p>
+        : <p className="ml-1 pt-1 text-xs font-medium text-on-surface-variant">PDF ou imagem, até {MAX_CONTRACT_MB} MB.</p>}
+    </div>
   );
 };
 
@@ -91,8 +118,8 @@ interface EditProfileViewProps {
   onBack: () => void;
   // Só na edição: fecha o formulário e reabre o perfil do atleta, sem salvar
   onBackToProfile?: () => void;
-  // contractUpload: arquivo de contrato novo, enviado ao salvar
-  onSave: (data: Partial<Athlete>, contractUpload?: File) => void;
+  // contractUpload e loanUpload: arquivos novos do contrato e do contrato de empréstimo, enviados ao salvar
+  onSave: (data: Partial<Athlete>, contractUpload?: File, loanUpload?: File) => void;
   onDelete?: (id: string) => void;
   athletes?: Athlete[];
   // Clubes do app (os que já vêm e os da aba Clubes): opções do clube e origem do escudo
@@ -108,7 +135,6 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
   const [cropSource, setCropSource] = useState<string | null>(null);
   // Clube atual: escolhido na lista de clubes (ou digitado em "Outro"); o escudo vem do cadastro de clubes
   const [club, setClub] = useState(athlete?.club && athlete.club !== 'Sem Clube' ? athlete.club : '');
-  const sameClub = clubKey(club) === clubKey(athlete?.club);
   const athleteFileRef = useRef<HTMLInputElement>(null);
 
   const nameRef = useRef<HTMLInputElement>(null);
@@ -148,6 +174,9 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
   // "Está emprestado?" (só em Negociados): com "Não" os dados do empréstimo são apagados ao salvar
   const [onLoan, setOnLoan] = useState(athlete?.onLoan ?? false);
   const [loanClub, setLoanClub] = useState(athlete?.loanClub || '');
+  // Clube gravado no atleta: em Negociados é o Clube do Contrato (o empréstimo troca o clube só na exibição); sem ele, vale o que já estava
+  const currentClub = isNegociado ? contractClub.trim() || club.trim() : club.trim();
+  const sameClub = clubKey(currentClub) === clubKey(athlete?.club);
   const [loanStart, setLoanStart] = useState(athlete?.loanStart || '');
   const [loanEnd, setLoanEnd] = useState(athlete?.loanEnd || '');
   const loanLeft = contractTimeLeft(loanEnd);
@@ -163,23 +192,11 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
     return [...byName.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((name) => ({ value: name, label: name, image: logos.get(clubKey(name)) }));
   }, [clubs, athletes, athlete, club, contractClub, loanClub]);
 
-  // Arquivo do contrato: o já gravado (caminho no Storage) e o novo, que só é enviado ao salvar
-  const contractFileRef = useRef<HTMLInputElement>(null);
+  // Arquivos do contrato e do contrato de empréstimo: o já gravado (caminho no Storage) e o novo, que só é enviado ao salvar
   const [contractFile, setContractFile] = useState(athlete?.contractFile || '');
   const [contractUpload, setContractUpload] = useState<File | null>(null);
-  const [contractFileError, setContractFileError] = useState('');
-  const pickContractFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-    if (file.size > MAX_CONTRACT_MB * 1024 * 1024) {
-      setContractFileError(`O arquivo passa de ${MAX_CONTRACT_MB} MB. Escolha um arquivo menor.`);
-      return;
-    }
-    setContractFileError('');
-    setContractUpload(file);
-  };
-  const contractFileLabel = contractUpload?.name || contractFileName(contractFile);
+  const [loanContractFile, setLoanContractFile] = useState(athlete?.loanContractFile || '');
+  const [loanUpload, setLoanUpload] = useState<File | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, setter: (val: string) => void) => {
     const file = e.target.files?.[0];
@@ -218,7 +235,7 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
       lastName: nameParts.slice(1).join(' ') || '',
       position: positionRef.current?.value as any,
       secondaryPosition: secondaryPositionRef.current?.value as any,
-      club: club.trim(),
+      club: currentClub,
       category: categoryRef.current?.value,
       image: athleteImage,
       // O escudo não é mais enviado aqui: mantém o que já estava gravado no atleta enquanto o clube for o mesmo
@@ -250,12 +267,14 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
       loanClub: isNegociado ? (onLoan ? loanClub.trim() : '') : athlete?.loanClub,
       loanStart: isNegociado ? (onLoan ? loanStart : '') : athlete?.loanStart,
       loanEnd: isNegociado ? (onLoan ? loanEnd : '') : athlete?.loanEnd,
+      // Sem empréstimo (ou sem o clube), o arquivo do contrato de empréstimo é apagado junto
+      loanContractFile: isNegociado ? (onLoan && loanClub.trim() ? loanContractFile : '') : athlete?.loanContractFile,
       // Origem e observações não são editadas aqui: mantém o que já estava gravado
       notes: athlete?.notes,
       hasDvd,
       dvdLink,
       source: athlete?.source,
-    }, contractUpload || undefined);
+    }, contractUpload || undefined, (isNegociado && onLoan && loanClub.trim() && loanUpload) || undefined);
   };
 
   return (
@@ -372,8 +391,17 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
         <FormSection title="Informações esportivas">
           <div className="space-y-1">
             <label className={labelClass}>Clube Atual</label>
-            {/* O escudo vem do cadastro de clubes (aba Clubes) e aparece na própria lista */}
-            <ClubPicker value={club} options={clubOptions} onChange={setClub} label="Clube Atual" />
+            {isNegociado ? (
+              <>
+                {/* Em Negociados o clube atual não é escolhido: é o do empréstimo ou, sem empréstimo, o Clube do Contrato */}
+                <div className={`${inputClass} flex min-h-[50px] items-center text-on-surface-variant`}>
+                  {onLoan && loanClub.trim() ? `${loanClub.trim()} (empréstimo)` : currentClub || 'Sem Clube'}
+                </div>
+                <p className="ml-1 pt-1 text-xs font-medium text-on-surface-variant">Definido em "Informações contratuais": o Clube do Empréstimo ou, sem empréstimo, o Clube do Contrato.</p>
+              </>
+            ) : (
+              <ClubPicker value={club} options={clubOptions} onChange={setClub} label="Clube Atual" />
+            )}
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 [&>*]:min-w-0">
             <div className="space-y-1">
@@ -432,39 +460,7 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
               )}
             </div>
           </div>
-          <div className="space-y-1">
-            <label className={labelClass}>Arquivo do Contrato</label>
-            <input type="file" ref={contractFileRef} className="hidden" accept="application/pdf,image/png,image/jpeg,image/webp" onChange={pickContractFile} />
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-surface-high px-4 py-3">
-              <FileText className={`h-4 w-4 shrink-0 ${contractFileLabel ? 'text-white' : 'text-on-surface-variant/50'}`} />
-              <div className="min-w-0 flex-1">
-                <p className={`truncate text-sm font-bold ${contractFileLabel ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>
-                  {contractFileLabel || 'Nenhum arquivo enviado'}
-                </p>
-                {contractUpload && <p className="text-xs font-medium text-on-surface-variant">Será enviado ao salvar o atleta.</p>}
-              </div>
-              <button
-                type="button"
-                onClick={() => contractFileRef.current?.click()}
-                className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-4 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                {contractFileLabel ? 'Trocar arquivo' : 'Enviar arquivo'}
-              </button>
-              {contractFileLabel && (
-                <button
-                  type="button"
-                  onClick={() => { setContractUpload(null); setContractFile(''); setContractFileError(''); }}
-                  className="inline-flex h-9 items-center rounded-full border border-white/15 px-4 text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant transition hover:border-error/50 hover:text-error"
-                >
-                  Remover
-                </button>
-              )}
-            </div>
-            {contractFileError
-              ? <p className="ml-1 pt-1 text-xs font-bold text-error">{contractFileError}</p>
-              : <p className="ml-1 pt-1 text-xs font-medium text-on-surface-variant">PDF ou imagem, até {MAX_CONTRACT_MB} MB.</p>}
-          </div>
+          <ContractFileField label="Arquivo do Contrato" saved={contractFile} upload={contractUpload} onPick={setContractUpload} onRemove={() => { setContractUpload(null); setContractFile(''); }} />
           {isNegociado && (
             <>
               <div className="space-y-2">
@@ -475,6 +471,7 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
                 </div>
               </div>
               {onLoan && (
+                <>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 [&>*]:min-w-0">
                   <div className="space-y-1">
                     <label className={labelClass}>Clube do Empréstimo</label>
@@ -494,6 +491,8 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
                     )}
                   </div>
                 </div>
+                <ContractFileField label="Arquivo do Contrato de Empréstimo" saved={loanContractFile} upload={loanUpload} onPick={setLoanUpload} onRemove={() => { setLoanUpload(null); setLoanContractFile(''); }} />
+                </>
               )}
             </>
           )}

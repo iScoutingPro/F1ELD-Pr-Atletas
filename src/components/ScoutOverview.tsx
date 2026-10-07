@@ -4,29 +4,29 @@ import { Athlete, ScoutEntry } from '../types';
 import { SCOUT_FIELDS, formatScoutValue, scoutMonthKey, scoutValue } from '../scout';
 import { SheetSelect } from './SheetSelect';
 
-const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
-const labelClass = 'text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant';
+export const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
+export const labelClass = 'text-[9px] font-black uppercase tracking-[0.2em] text-on-surface-variant';
 const filterClass = 'h-10 w-full rounded-xl border bg-white/[0.04] px-3 text-sm text-white outline-none transition';
 
 const FIELD_BY_KEY = new Map(SCOUT_FIELDS.map((field) => [field.key, field]));
-const fieldOf = (key: string) => FIELD_BY_KEY.get(key)!;
+export const fieldOf = (key: string) => FIELD_BY_KEY.get(key)!;
 
 const fullName = (athlete: Athlete) => `${athlete.name} ${athlete.lastName || ''}`.trim();
 const format = (value: number) => value.toLocaleString('pt-BR');
 
 // O resumo tem dois níveis. Scout geral (súmula): o que existe em todo jogo (Titular, Reserva, Entrou, Saiu, Minutagem, Gols e cartões), sempre à mostra.
 // Scout técnico: os outros números, que só existem nos jogos com transmissão, e aparecem pelo botão "Scout técnico"
-const SHEET_KEYS = new Set(['starter', 'bench', 'subIn', 'subOut', 'minutes', 'goals', 'yellowCards', 'redCards']);
+export const SHEET_KEYS = new Set(['starter', 'bench', 'subIn', 'subOut', 'minutes', 'goals', 'yellowCards', 'redCards']);
 
 // Números em destaque no topo do resumo (súmula); clicar escolhe o número dos gráficos de "Evolução"
-const GAMES_KEY = 'games';
-const GAMES_LABEL = 'Jogos relacionados';
-const HEADLINE_KEYS = [GAMES_KEY, 'minutes', 'starter', 'bench', 'goals'];
+export const GAMES_KEY = 'games';
+export const GAMES_LABEL = 'Jogos relacionados';
+export const HEADLINE_KEYS = [GAMES_KEY, 'minutes', 'starter', 'bench', 'goals'];
 // Quadros menores, embaixo dos em destaque
-const SHEET_TILE_KEYS = ['subIn', 'subOut', 'yellowCards', 'redCards'];
+export const SHEET_TILE_KEYS = ['subIn', 'subOut', 'yellowCards', 'redCards'];
 // Cor do ícone dos quadros menores, a pedido do usuário (única exceção ao preto e branco do resumo):
 // Entrou verde, Saiu vermelho e os cartões na cor de cada um (o ícone do cartão é preenchido)
-const TILE_TONES: Record<string, string> = {
+export const TILE_TONES: Record<string, string> = {
   subIn: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-400',
   subOut: 'border-red-500/30 bg-red-500/10 text-red-500',
   yellowCards: 'border-yellow-400/30 bg-yellow-400/10 text-yellow-400 [&>svg]:fill-current',
@@ -34,7 +34,7 @@ const TILE_TONES: Record<string, string> = {
 };
 
 // Ícone de cada quadro do scout geral (GAMES_KEY é o quadro "Jogos relacionados", a contagem de lançamentos)
-const GENERAL_ICONS: Record<string, LucideIcon> = {
+export const GENERAL_ICONS: Record<string, LucideIcon> = {
   minutes: Timer,
   goals: Target,
   yellowCards: RectangleVertical,
@@ -52,7 +52,7 @@ const TECH_TILE_KEYS = ['tackles', 'tacklesIncomplete', 'interceptions', 'ballLo
 // Fundamentos: percentual de acerto (certos sobre o total) e as parcelas que formam o total
 const OK_TONE = 'bg-primary';
 const MISS_TONE = 'bg-white/25';
-const RATES = [
+export const RATES = [
   { label: 'Ações', ok: 'actionsOk', total: 'actionsTotal', pct: 'actionsPct', parts: [{ key: 'actionsOk', label: 'Bem sucedidas', tone: OK_TONE }, { key: 'actionsBad', label: 'Mal sucedidas', tone: MISS_TONE }] },
   { label: 'Passes', ok: 'passesCompleted', total: 'passesTotal', pct: 'passesPct', parts: [{ key: 'passesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'passesMissed', label: 'Errados', tone: MISS_TONE }] },
   { label: 'Passes longos', ok: 'longPassesCompleted', total: 'longPassesTotal', pct: 'longPassesPct', parts: [{ key: 'longPassesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'longPassesMissed', label: 'Errados', tone: MISS_TONE }] },
@@ -67,7 +67,7 @@ const TECH_RANKING_KEYS = ['goalParticipations', 'assists', 'passesCompleted', '
 const RANKING_SIZE = 8;
 
 // Comparativos do scout técnico: dois números que formam um par
-const TECH_SPLITS = [
+export const TECH_SPLITS = [
   { title: 'Desarmes', left: 'tackles', right: 'tacklesIncomplete', leftLabel: 'Completos', rightLabel: 'Incompletos' },
   { title: 'Faltas', left: 'foulsSuffered', right: 'foulsCommitted', leftLabel: 'Sofridas', rightLabel: 'Cometidas' },
   { title: 'Duelo aéreo defensivo', left: 'aerialDefWon', right: 'aerialDefLost', leftLabel: 'Vencidos', rightLabel: 'Perdidos' },
@@ -107,7 +107,7 @@ const radarPoint = (index: number, ratio: number, radius = RADAR.radius) => {
 const radarPolygon = (ratios: number[]) => ratios.map((ratio, index) => { const p = radarPoint(index, ratio); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
 
 // values: aproveitamento dos lançamentos filtrados; reference: o de todos os atletas, para comparar quando há um atleta escolhido
-const RadarChart: React.FC<{ values: (number | undefined)[]; reference?: (number | undefined)[] }> = ({ values, reference }) => (
+export const RadarChart: React.FC<{ values: (number | undefined)[]; reference?: (number | undefined)[] }> = ({ values, reference }) => (
   <svg viewBox={`0 0 ${RADAR.width} ${RADAR.height}`} className="mx-auto w-full max-w-[440px]" role="img" aria-label="Radar de aproveitamento">
     {[0.25, 0.5, 0.75, 1].map((ring) => (
       <polygon key={ring} points={radarPolygon(RATES.map(() => ring))} fill="none" className={ring === 1 ? 'stroke-white/20' : 'stroke-white/10'} strokeWidth="1" />

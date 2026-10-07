@@ -4,6 +4,8 @@ import { motion } from 'motion/react';
 import { MapPin, Clock3, ChevronLeft, ChevronRight, Plus, Pencil, Search, Check, X, Trash2, Trophy } from 'lucide-react';
 import { Athlete, Game } from '../types';
 import { CATEGORIES } from '../categories';
+import { Club, clubKey } from '../clubs';
+import { ClubPicker } from '../components/ClubPicker';
 
 interface CalendarViewProps {
   games: Game[];
@@ -11,6 +13,8 @@ interface CalendarViewProps {
   onSelectAthlete?: (athlete: Athlete) => void;
   // Escudo pelo nome do clube, do cadastro de clubes (vale também para o adversário, que não tem atleta cadastrado)
   clubLogoOf?: (club?: string) => string | undefined;
+  // Clubes do app (os que já vêm e os da aba Clubes): opções de Mandante e Visitante no formulário de jogo
+  clubs?: Club[];
   // Só o admin recebe os callbacks de gravação; sem eles os botões não aparecem
   onSaveGame?: (game: Omit<Game, 'id'>, id?: string) => Promise<boolean>;
   onDeleteGame?: (id: string) => Promise<boolean>;
@@ -57,16 +61,28 @@ interface GameFormProps {
   game?: Game;
   initialDate: string;
   athletes: Athlete[];
+  // Opções das listas de Mandante e Visitante: clubes do app, clubes dos atletas e times dos jogos já cadastrados
+  teamNames: string[];
+  clubLogoOf?: (club?: string) => string | undefined;
   onSave: (game: Omit<Game, 'id'>, id?: string) => Promise<boolean>;
   onDelete?: (id: string) => Promise<boolean>;
   onClose: () => void;
 }
 
-const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: GameFormProps) => {
+const GameForm = ({ game, initialDate, athletes, teamNames, clubLogoOf, onSave, onDelete, onClose }: GameFormProps) => {
   const [date, setDate] = useState(game?.date || initialDate);
   const [time, setTime] = useState(game?.time || '');
   const [home, setHome] = useState(game?.home || '');
   const [away, setAway] = useState(game?.away || '');
+  // Lista de clubes de Mandante e Visitante, com o escudo em miniatura; o time já escolhido entra mesmo que não esteja em nenhum cadastro
+  const teamOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    [...teamNames, home, away].forEach((team) => {
+      const name = (team || '').trim();
+      if (name && name !== 'Sem Clube' && !byKey.has(clubKey(name))) byKey.set(clubKey(name), name);
+    });
+    return [...byKey.values()].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((name) => ({ value: name, label: name, image: clubLogoOf?.(name) }));
+  }, [teamNames, home, away, clubLogoOf]);
   const [venue, setVenue] = useState(game?.venue || '');
   const [category, setCategory] = useState(game?.category || '');
   const [competition, setCompetition] = useState(game?.competition || '');
@@ -172,11 +188,11 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 [&>*]:min-w-0">
             <div className="space-y-1">
               <label className={labelClass}>Mandante *</label>
-              <input type="text" value={home} onChange={(e) => setHome(e.target.value)} className={inputClass} placeholder="Time da casa" />
+              <ClubPicker value={home} options={teamOptions} onChange={setHome} label="Mandante" />
             </div>
             <div className="space-y-1">
               <label className={labelClass}>Visitante *</label>
-              <input type="text" value={away} onChange={(e) => setAway(e.target.value)} className={inputClass} placeholder="Time visitante" />
+              <ClubPicker value={away} options={teamOptions} onChange={setAway} label="Visitante" />
             </div>
           </div>
 
@@ -285,7 +301,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   );
 };
 
-export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onDeleteGame, clubLogoOf }: CalendarViewProps) => {
+export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onDeleteGame, clubLogoOf, clubs = [] }: CalendarViewProps) => {
   const todayKey = formatDateKey(new Date());
   const initialMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
@@ -589,6 +605,8 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
           game={formGame === 'new' ? undefined : formGame}
           initialDate={selectedDate}
           athletes={athletes}
+          teamNames={[...clubs.map((club) => club.name), ...athletes.map((athlete) => athlete.club), ...games.flatMap((item) => [item.home, item.away])]}
+          clubLogoOf={clubLogoOf}
           onSave={onSaveGame}
           onDelete={onDeleteGame}
           onClose={() => setFormGame(null)}
