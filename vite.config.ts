@@ -1,25 +1,37 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig, loadEnv} from 'vite';
+import {defineConfig} from 'vite';
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, '.', '');
-  return {
-    plugins: [react(), tailwindcss()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+// Bibliotecas grandes em arquivos próprios: mudam pouco, então o navegador guarda e não baixa de novo a cada versão do app
+const VENDOR_CHUNKS: Record<string, string[]> = {
+  react: ['react', 'react-dom', 'scheduler'],
+  supabase: ['@supabase'],
+  motion: ['motion', 'framer-motion', 'motion-dom', 'motion-utils'],
+  icons: ['lucide-react'],
+};
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, '.'),
     },
-    resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return;
+          const pkg = id.split('node_modules/').pop()!.replace(/\\/g, '/');
+          for (const [chunk, names] of Object.entries(VENDOR_CHUNKS)) {
+            if (names.some(name => pkg === name || pkg.startsWith(`${name}/`))) return chunk;
+          }
+        },
       },
     },
-    server: {
-      allowedHosts: true,
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
-    },
-  };
+  },
+  server: {
+    allowedHosts: true,
+  },
 });

@@ -1,36 +1,46 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { ArrowLeft, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
-import { MOCK_ATHLETES } from './data';
 import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, TacticalMeeting, View } from './types';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
 import { AthleteInfo } from './components/AthleteInfo';
-import { AthleteGames } from './components/AthleteGames';
-import { AthleteScout } from './components/AthleteScout';
-import { AthleteContract } from './components/AthleteContract';
-import { AthleteTactical } from './components/AthleteTactical';
-import { AthletePdf } from './components/AthletePdf';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
 import { DashboardView } from './views/DashboardView';
-import { ScoutView } from './views/ScoutView';
-import { AgenciadosNegociadosView } from './views/AgenciadosNegociadosView';
 import { AtletasTotaisView, ListFilter } from './views/AtletasTotaisView';
-import { AthletesListView } from './views/AthletesListView';
-import { ReportsView } from './views/ReportsView';
-import { SettingsView } from './views/SettingsView';
-import { EditProfileView } from './views/EditProfileView';
 import { RecoveryView, VerificationView } from './views/AuthSubViews';
 import { SecurityView, SuccessView } from './views/SecuritySubViews';
-import { SessionsView } from './views/SessionsView';
-import { CalendarView } from './views/CalendarView';
-import { ScoutEntryView } from './views/ScoutEntryView';
+
+// Telas e ícones do perfil que não aparecem ao entrar são baixados só quando abertos, para o app abrir mais rápido no celular
+const lazyNamed = <K extends string, M extends Record<K, React.ComponentType<any>>>(load: () => Promise<M>, name: K) =>
+  lazy(() => load().then(module => ({ default: module[name] })));
+
+const AthleteGames = lazyNamed(() => import('./components/AthleteGames'), 'AthleteGames');
+const AthleteScout = lazyNamed(() => import('./components/AthleteScout'), 'AthleteScout');
+const AthleteContract = lazyNamed(() => import('./components/AthleteContract'), 'AthleteContract');
+const AthleteTactical = lazyNamed(() => import('./components/AthleteTactical'), 'AthleteTactical');
+const AthletePdf = lazyNamed(() => import('./components/AthletePdf'), 'AthletePdf');
+const ScoutView = lazyNamed(() => import('./views/ScoutView'), 'ScoutView');
+const AgenciadosNegociadosView = lazyNamed(() => import('./views/AgenciadosNegociadosView'), 'AgenciadosNegociadosView');
+const AthletesListView = lazyNamed(() => import('./views/AthletesListView'), 'AthletesListView');
+const SettingsView = lazyNamed(() => import('./views/SettingsView'), 'SettingsView');
+const EditProfileView = lazyNamed(() => import('./views/EditProfileView'), 'EditProfileView');
+const SessionsView = lazyNamed(() => import('./views/SessionsView'), 'SessionsView');
+const CalendarView = lazyNamed(() => import('./views/CalendarView'), 'CalendarView');
+const ScoutEntryView = lazyNamed(() => import('./views/ScoutEntryView'), 'ScoutEntryView');
+
+// Enquanto a parte da tela é baixada
+const LoadingPanel = () => (
+  <div className="flex min-h-[40vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/15 border-t-primary" aria-label="Carregando" />
+  </div>
+);
 
 const AUTH_SESSION_KEY = 'fieldpro_authenticated_v1';
 const RLS_VIOLATION_CODE = '42501';
@@ -169,7 +179,7 @@ const mapAthleteRow = (a: any): Athlete => ({
 
 export default function App() {
   const [view, setView] = useState<View>('login');
-  const [athletes, setAthletes] = useState<Athlete[]>(MOCK_ATHLETES);
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
   // Lista escolhida na pergunta do "Adicionar atleta", guardada na abertura do cadastro
@@ -473,35 +483,52 @@ export default function App() {
       }
     };
 
+    // Cada carga devolve false quando falhou (sem internet, por exemplo); tabela ainda não criada não conta como falha
+    const loadFailed = (label: string, error: { code?: string; message: string }) => {
+      console.error(`Erro ao carregar ${label}:`, error);
+      return !MISSING_TABLE_CODES.includes(error.code ?? '');
+    };
+
     const fetchAthletes = async () => {
-      const { data, error } = await supabase.from('athletes').select('*');
-      if (data && !error) {
-        setAthletes(data.map(mapAthleteRow));
-      }
       fetchActivities();
+      const { data, error } = await supabase.from('athletes').select('*');
+      if (error) {
+        console.error('Erro ao carregar atletas:', error);
+        return false;
+      }
+      setAthletes((data ?? []).map(mapAthleteRow));
+      return true;
     };
 
     const fetchGames = async () => {
       const { data, error } = await supabase.from('games').select('*');
-      if (error) {
-        console.error('Erro ao carregar jogos:', error);
-      } else if (data) {
-        setGames(data.map(mapGameRow));
-      }
+      if (error) return !loadFailed('jogos', error);
+      setGames((data ?? []).map(mapGameRow));
+      return true;
     };
 
     const fetchScoutEntries = async () => {
       const { data, error } = await supabase.from('scout_entries').select('*');
-      if (error) {
-        console.error('Erro ao carregar scout:', error);
-      } else if (data) {
-        setScoutEntries(data.map(mapScoutRow));
-      }
+      if (error) return !loadFailed('scout', error);
+      setScoutEntries((data ?? []).map(mapScoutRow));
+      return true;
     };
 
-    fetchAthletes();
-    fetchGames();
-    fetchScoutEntries();
+    const safely = (load: () => Promise<boolean>) =>
+      load().catch(err => {
+        console.error('Erro ao carregar dados:', err);
+        return false;
+      });
+
+    // Sem a lista de exemplo: se algo não carregar, o usuário é avisado em vez de ver dados incompletos sem saber
+    Promise.all([safely(fetchAthletes), safely(fetchGames), safely(fetchScoutEntries)]).then(results => {
+      if (results.includes(false)) {
+        setNotice({
+          title: 'Dados não carregados',
+          message: 'Não foi possível carregar todas as informações do app. Confira a conexão com a internet e recarregue a página.',
+        });
+      }
+    });
   }, [session]);
 
   const recordActivity = async (activity: any) => {
@@ -1128,7 +1155,7 @@ export default function App() {
       <main className={`relative ${showShell ? 'pl-16 lg:pl-80' : ''}`}>
         <AnimatePresence mode="wait">
           <motion.div key={view} initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} transition={{ duration: 0.3 }}>
-            {renderView()}
+            <Suspense fallback={<LoadingPanel />}>{renderView()}</Suspense>
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1252,6 +1279,7 @@ export default function App() {
                   Voltar para as informações
                 </button>
               )}
+              <Suspense fallback={<LoadingPanel />}>
               {profileDetailView === 'calendar' ? (
                 <AthleteGames athlete={selectedAthlete} games={games} />
               ) : profileDetailView === 'stats' ? (
@@ -1274,6 +1302,7 @@ export default function App() {
               ) : (
                 <AthleteInfo athlete={selectedAthlete} />
               )}
+              </Suspense>
             </div>
           </div>
         </div>
@@ -1293,8 +1322,8 @@ export default function App() {
             </button>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-white/10 via-white/[0.03] to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
-            <div>
-              <EditProfileView 
+            <Suspense fallback={<LoadingPanel />}>
+              <EditProfileView
                 athlete={selectedAthlete || undefined} 
                 onSave={handleSaveAthlete} 
                 onDelete={isAdmin ? handleDeleteAthlete : undefined}
@@ -1302,7 +1331,7 @@ export default function App() {
                 athletes={athletes}
                 listType={selectedAthlete?.listType ?? addingListType}
               />
-            </div>
+            </Suspense>
           </div>
         </div>
       ) : null}

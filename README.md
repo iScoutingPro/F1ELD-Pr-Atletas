@@ -1,20 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Field Pro Atletas
 
-# Run and deploy your AI Studio app
+App web de gestão de atletas de futebol da Attiva Sports (React, Vite e Supabase).
 
-This contains everything you need to run your app locally.
+## Como rodar
 
-View your app in AI Studio: https://ai.studio/apps/95105fd2-b5bd-4a82-b15f-69cbc2698876
+Pré-requisito: Node.js.
 
-## Run Locally
+1. `npm install`
+2. Copiar `.env.example` para `.env.local` e preencher `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`
+3. `npm run dev` e abrir http://localhost:3000
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Os arquivos da pasta `supabase/` criam as tabelas e as regras de acesso e são executados manualmente no SQL Editor do Supabase.
