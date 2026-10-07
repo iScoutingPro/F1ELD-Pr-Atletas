@@ -1,6 +1,7 @@
 import React from 'react';
-import { ArrowUpRight, BriefcaseBusiness, Calendar, FileText, Flag, LucideIcon, MapPin, MessageCircle, Shield, Target, Trophy, User, Video } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, Calendar, Clock, FileText, Flag, LucideIcon, MapPin, MessageCircle, Shield, Target, Trophy, User, Video } from 'lucide-react';
 import { Athlete } from '../types';
+import { activeLoanClub, contractTimeLeft } from '../contract';
 import { findCountry } from '../countries';
 import { CountryFlag } from './CountrySelect';
 
@@ -73,7 +74,9 @@ const ContactCard = ({ label, phone }: { label: string; phone?: string }) => pho
   </div>
 );
 
-export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
+// onOpenContract: abre dentro do app o arquivo de contrato enviado pelo formulário
+// clubLogoOf: escudo de um clube pelo nome (o do próprio atleta ou o de outro atleta cadastrado no mesmo clube)
+export const AthleteInfo =({ athlete, onOpenContract, clubLogoOf }: { athlete: Athlete; onOpenContract?: () => void; clubLogoOf?: (club?: string) => string | undefined }) => {
   // Em Negociados, empresário com empresa ou nome aparece no cartão do empresário (com o WhatsApp);
   // só com o WhatsApp, aparece como terceiro contato
   const isNegociado = athlete.listType === 'negociados';
@@ -92,14 +95,28 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
 
   const start = toTime(athlete.contractStart);
   const end = toTime(athlete.contractEnd);
+  const timeLeft = contractTimeLeft(athlete.contractEnd);
+  const loanClub = activeLoanClub(athlete);
+  const hasLoan = Boolean(athlete.onLoan && athlete.loanClub);
+  const loanLeft = contractTimeLeft(athlete.loanEnd);
+  const loanStart = toTime(athlete.loanStart);
+  const loanEnd = toTime(athlete.loanEnd);
+  const loanPending = loanStart !== null && loanStart > Date.now();
+  const loanProgress = loanStart !== null && loanEnd !== null && loanEnd > loanStart
+    ? Math.min(100, Math.max(0, ((Date.now() - loanStart) / (loanEnd - loanStart)) * 100))
+    : null;
   const now = Date.now();
   const expired = end !== null && end < now;
   const progress = start !== null && end !== null && end > start
     ? Math.min(100, Math.max(0, ((now - start) / (end - start)) * 100))
     : null;
-  const contractParty = athlete.contractType === 'Clube'
+  // Em Negociados o contrato é sempre com o clube, mesmo nos cadastros antigos gravados como 'Field'
+  const clubContract = athlete.contractType === 'Clube' || athlete.listType === 'negociados';
+  const contractParty = clubContract
     ? (athlete.contractClub || athlete.club)
     : 'Field';
+  const contractLogo = clubContract ? clubLogoOf?.(contractParty) : undefined;
+  const loanLogo = clubLogoOf?.(athlete.loanClub);
 
   return (
     <div className="mt-8 space-y-8">
@@ -134,9 +151,9 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
         <div className="space-y-3">
           <SectionTitle>Informações esportivas</SectionTitle>
           <div className={`${panelClass} divide-y divide-white/5`}>
-            <InfoRow icon={Shield} label="Clube Atual" value={athlete.club}>
-              {athlete.clubLogo && (
-                <img src={athlete.clubLogo} alt={athlete.club} className="h-9 w-9 shrink-0 object-contain mix-blend-screen" />
+            <InfoRow icon={Shield} label="Clube Atual" value={loanClub ? `${loanClub} (empréstimo)` : athlete.club}>
+              {(loanClub ? athlete.loanClubLogo : athlete.clubLogo) && (
+                <img src={loanClub ? athlete.loanClubLogo : athlete.clubLogo} alt="" className="h-9 w-9 shrink-0 object-contain mix-blend-screen" />
               )}
             </InfoRow>
             <InfoRow icon={Trophy} label="Categoria" value={athlete.category} />
@@ -152,9 +169,12 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
           <div className={`${panelClass} relative overflow-hidden p-6`}>
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
             <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="min-w-0">
-                <p className={labelClass}>Contrato com {athlete.contractType === 'Clube' ? 'o clube' : 'a agência'}</p>
-                <p className="mt-2 truncate text-2xl font-black uppercase italic leading-none tracking-tight text-white">{contractParty}</p>
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="min-w-0">
+                  <p className={labelClass}>Contrato com {clubContract ? 'o clube' : 'a agência'}</p>
+                  <p className="mt-2 truncate text-2xl font-black uppercase italic leading-none tracking-tight text-white">{contractParty}</p>
+                </div>
+                {contractLogo && <img src={contractLogo} alt="" className="h-12 w-12 shrink-0 object-contain mix-blend-screen" />}
               </div>
               <div className="flex items-center gap-3">
                 {end !== null && (
@@ -162,7 +182,17 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
                     {expired ? 'Encerrado' : 'Vigente'}
                   </span>
                 )}
-                {athlete.contractLink && (
+                {athlete.contractFile && onOpenContract && (
+                  <button
+                    type="button"
+                    onClick={onOpenContract}
+                    className="flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Abrir contrato
+                  </button>
+                )}
+                {!athlete.contractFile && athlete.contractLink && (
                   <a
                     href={athlete.contractLink}
                     target="_blank"
@@ -186,6 +216,12 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
                 <p className="mt-1 text-sm font-bold text-on-surface">{formatDate(athlete.contractEnd) || '—'}</p>
               </div>
             </div>
+            {timeLeft && !timeLeft.expired && (
+              <p className="mt-3 flex items-center justify-end gap-2 text-xs font-black uppercase tracking-[0.14em] text-white">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                {timeLeft.text} para o término do contrato
+              </p>
+            )}
             {progress !== null && (
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
                 <div className={`h-full rounded-full ${expired ? 'bg-error' : 'bg-primary'}`} style={{ width: `${progress}%` }} />
@@ -198,6 +234,45 @@ export const AthleteInfo =({ athlete }: { athlete: Athlete }) => {
               <FileText className="h-4 w-4 text-on-surface-variant" />
             </div>
             <p className="text-sm font-bold text-on-surface-variant">Nenhum contrato cadastrado.</p>
+          </div>
+        )}
+        {hasLoan && (
+          <div className={`${panelClass} relative overflow-hidden p-6`}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="min-w-0">
+                  <p className={labelClass}>Emprestado ao clube</p>
+                  <p className="mt-2 truncate text-2xl font-black uppercase italic leading-none tracking-tight text-white">{athlete.loanClub}</p>
+                </div>
+                {loanLogo && <img src={loanLogo} alt="" className="h-12 w-12 shrink-0 object-contain mix-blend-screen" />}
+              </div>
+              <span className={`rounded-full border px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.2em] ${loanLeft?.expired ? 'border-error/30 bg-error/10 text-error' : 'border-primary/30 bg-primary/10 text-primary'}`}>
+                {loanLeft?.expired ? 'Empréstimo encerrado' : loanPending ? 'Empréstimo agendado' : 'Em empréstimo'}
+              </span>
+            </div>
+
+            <div className="mt-6 flex items-end justify-between gap-4">
+              <div>
+                <p className={labelClass}>Início</p>
+                <p className="mt-1 text-sm font-bold text-on-surface">{formatDate(athlete.loanStart) || '—'}</p>
+              </div>
+              <div className="text-right">
+                <p className={labelClass}>Término</p>
+                <p className="mt-1 text-sm font-bold text-on-surface">{formatDate(athlete.loanEnd) || '—'}</p>
+              </div>
+            </div>
+            {loanLeft && !loanLeft.expired && (
+              <p className="mt-3 flex items-center justify-end gap-2 text-xs font-black uppercase tracking-[0.14em] text-white">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                {loanLeft.text} para o fim do empréstimo
+              </p>
+            )}
+            {loanProgress !== null && (
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div className={`h-full rounded-full ${loanLeft?.expired ? 'bg-error' : 'bg-primary'}`} style={{ width: `${loanProgress}%` }} />
+              </div>
+            )}
           </div>
         )}
       </div>

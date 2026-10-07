@@ -1,7 +1,7 @@
 import { Athlete, Game, ScoutEntry } from './types';
 import { findCountry } from './countries';
 import { SCOUT_FIELDS, formatScoutValue, scoutValue, sortScoutEntries } from './scout';
-import { contractGoalProgress, formatNumber } from './contract';
+import { contractGoalProgress, contractTimeLeft, formatNumber } from './contract';
 
 // Seções que o usuário pode incluir no PDF do atleta, na ordem em que saem no documento
 export const PDF_SECTIONS = [
@@ -589,7 +589,6 @@ export const buildAthletePdf = async ({ athlete, sections, entries, games }: Ath
     const startTime = athlete.contractStart ? new Date(`${athlete.contractStart.slice(0, 10)}T00:00:00`).getTime() : NaN;
     const endTime = athlete.contractEnd ? new Date(`${athlete.contractEnd.slice(0, 10)}T00:00:00`).getTime() : NaN;
     const now = new Date(`${today}T00:00:00`).getTime();
-    const daysLeft = Number.isNaN(endTime) ? null : Math.round((endTime - now) / 86400000);
     const hasContract = Boolean(athlete.contractLevel || athlete.contractStart || athlete.contractEnd || athlete.contractLink);
 
     // O quadro do contrato e a barra da vigência ficam na mesma página
@@ -602,7 +601,7 @@ export const buildAthletePdf = async ({ athlete, sections, entries, games }: Ath
         { label: 'Tipo de contrato', value: athlete.contractLevel },
         { label: 'Início', value: formatDate(athlete.contractStart) },
         { label: 'Término', value: end },
-        { label: 'Situação', value: daysLeft === null ? '' : daysLeft < 0 ? 'Encerrado' : daysLeft === 0 ? 'Termina hoje' : `Faltam ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'}` },
+        { label: 'Situação', value: contractTimeLeft(athlete.contractEnd, today)?.text || '' },
       ], 4);
       if (!Number.isNaN(startTime) && !Number.isNaN(endTime) && endTime > startTime) {
         const elapsed = Math.max(0, Math.min(100, Math.round(((now - startTime) / (endTime - startTime)) * 100)));

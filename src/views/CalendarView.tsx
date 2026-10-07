@@ -9,6 +9,8 @@ interface CalendarViewProps {
   games: Game[];
   athletes: Athlete[];
   onSelectAthlete?: (athlete: Athlete) => void;
+  // Escudo pelo nome do clube, do cadastro de clubes (vale também para o adversário, que não tem atleta cadastrado)
+  clubLogoOf?: (club?: string) => string | undefined;
   // Só o admin recebe os callbacks de gravação; sem eles os botões não aparecem
   onSaveGame?: (game: Omit<Game, 'id'>, id?: string) => Promise<boolean>;
   onDeleteGame?: (id: string) => Promise<boolean>;
@@ -283,7 +285,7 @@ const GameForm = ({ game, initialDate, athletes, onSave, onDelete, onClose }: Ga
   );
 };
 
-export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onDeleteGame }: CalendarViewProps) => {
+export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onDeleteGame, clubLogoOf }: CalendarViewProps) => {
   const todayKey = formatDateKey(new Date());
   const initialMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
   const [currentMonth, setCurrentMonth] = useState(initialMonth);
@@ -503,7 +505,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
 
                       <div className="relative grid grid-cols-[1fr_auto_1fr] items-start gap-2 px-3 pb-5 pt-5 sm:gap-3 sm:px-5">
                         <div className="flex min-w-0 flex-col items-center gap-2.5 text-center">
-                          <TeamCrest name={game.home} logo={clubLogos.get(game.home.trim().toLowerCase())} />
+                          <TeamCrest name={game.home} logo={clubLogoOf?.(game.home) || clubLogos.get(game.home.trim().toLowerCase())} />
                           <p className="w-full break-words text-[13px] font-black uppercase italic leading-tight text-white">{game.home}</p>
                           <span className="text-[7px] font-black uppercase tracking-[0.26em] text-on-surface-variant">Mandante</span>
                         </div>
@@ -518,7 +520,7 @@ export const CalendarView = ({ games, athletes, onSelectAthlete, onSaveGame, onD
                         </div>
 
                         <div className="flex min-w-0 flex-col items-center gap-2.5 text-center">
-                          <TeamCrest name={game.away} logo={clubLogos.get(game.away.trim().toLowerCase())} />
+                          <TeamCrest name={game.away} logo={clubLogoOf?.(game.away) || clubLogos.get(game.away.trim().toLowerCase())} />
                           <p className="w-full break-words text-[13px] font-black uppercase italic leading-tight text-white">{game.away}</p>
                           <span className="text-[7px] font-black uppercase tracking-[0.26em] text-on-surface-variant">Visitante</span>
                         </div>

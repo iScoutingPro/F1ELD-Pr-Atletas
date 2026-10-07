@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUpRight, ChevronDown, Disc3, FileText, LucideIcon, MapPin, Plus, Search, Shield, SlidersHorizontal, Users, Video, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Athlete } from '../types';
+import { activeLoanClub } from '../contract';
 import { findCountry } from '../countries';
 import { CountryFlag } from '../components/CountrySelect';
 import { Logo } from '../components/Logo';
@@ -130,7 +131,9 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
   const { athlete } = entry;
   const country = findCountry(athlete.nacionalidade);
   const secondCountry = athlete.hasDualNationality ? findCountry(athlete.secondNationality) : undefined;
-  const club = clubOf(athlete);
+  // Emprestado: o cartão mostra o clube onde o atleta está, com o escudo dele
+  const loanClub = activeLoanClub(athlete);
+  const club = loanClub || clubOf(athlete);
   const expired = isExpired(athlete.contractEnd);
   const contractEnd = formatDate(athlete.contractEnd);
   const hasContract = !!(athlete.contractLevel || athlete.contractType);
@@ -184,6 +187,11 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
           <span className="truncate rounded-full bg-primary px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-background shadow-[0_6px_20px_-6px_rgba(255,255,255,0.5)]">
             {listLabel(entry)}
           </span>
+          {loanClub && (
+            <span className="mr-auto shrink-0 rounded-full border border-white/20 bg-white/5 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-white">
+              Emprestado
+            </span>
+          )}
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition duration-300 group-hover:border-primary group-hover:bg-primary group-hover:text-background">
             <ArrowUpRight className="h-3 w-3" />
           </span>
@@ -221,7 +229,7 @@ const AthleteCard: React.FC<{ entry: Entry; index: number; onSelect?: (athlete: 
 
         <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 sm:mt-2 sm:gap-y-1.5">
           <Detail icon={Shield} label="Clube Atual">
-            {athlete.clubLogo && <img src={athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
+            {(loanClub ? athlete.loanClubLogo : athlete.clubLogo) && <img src={loanClub ? athlete.loanClubLogo : athlete.clubLogo} alt="" className="h-4 w-4 shrink-0 object-contain" referrerPolicy="no-referrer" />}
             <span className="truncate">{club}</span>
           </Detail>
           <Detail icon={MapPin} label="Cidade/Estado" muted={!athlete.naturalidade}>

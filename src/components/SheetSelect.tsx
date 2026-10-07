@@ -8,6 +8,8 @@ export const normalize = (value: string) => value.normalize('NFD').replace(/[\u0
 export interface SheetOption {
   value: string;
   label: string;
+  // Miniatura à esquerda do nome (escudo do clube)
+  image?: string;
 }
 
 interface SheetSelectProps {
@@ -16,6 +18,8 @@ interface SheetSelectProps {
   onChange: (value: string) => void;
   // Mostra "Outra" no rodapé da lista
   onOther?: () => void;
+  // Texto desse botão ("Outra" quando não informado)
+  otherLabel?: string;
   label: string;
   invalid?: boolean;
   className: string;
@@ -27,7 +31,7 @@ const PANEL_HEIGHT = 320;
 
 // Lista suspensa da planilha, no visual do app (a lista nativa do navegador abria branca, com o texto branco).
 // O painel é desenhado fora da tabela (createPortal, posição fixa) para não ser cortado pela rolagem lateral
-export const SheetSelect = ({ value, options, onChange, onOther, label, invalid, className, placeholder = 'Selecione' }: SheetSelectProps) => {
+export const SheetSelect = ({ value, options, onChange, onOther, otherLabel = 'Outra', label, invalid, className, placeholder = 'Selecione' }: SheetSelectProps) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [rect, setRect] = useState<DOMRect | null>(null);
@@ -65,6 +69,8 @@ export const SheetSelect = ({ value, options, onChange, onOther, label, invalid,
   };
 
   const selected = options.find((option) => option.value === value);
+  // Lista com miniaturas: quem não tem imagem ganha o mesmo espaço, para os nomes ficarem alinhados
+  const hasImages = options.some((option) => option.image);
   const term = normalize(query);
   const visible = term ? options.filter((option) => normalize(option.label).includes(term)) : options;
   // Abre para cima quando não cabe embaixo
@@ -82,7 +88,8 @@ export const SheetSelect = ({ value, options, onChange, onOther, label, invalid,
         title={selected?.label || label}
         className={`${className} flex items-center justify-between gap-2 ${open ? 'border-primary bg-white/10' : invalid ? 'border-error/60' : 'border-white/10 hover:border-white/25'}`}
       >
-        <span className={`min-w-0 flex-1 truncate text-center ${selected ? 'font-bold text-white' : 'font-medium text-on-surface-variant'}`}>{selected?.label || placeholder}</span>
+        {selected?.image && <img src={selected.image} alt="" className="h-6 w-6 shrink-0 object-contain" />}
+        <span className={`min-w-0 flex-1 truncate ${hasImages ? 'text-left' : 'text-center'} ${selected ? 'font-bold text-white' : 'font-medium text-on-surface-variant'}`}>{selected?.label || placeholder}</span>
         <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${open ? 'rotate-180 text-primary' : 'text-on-surface-variant'}`} />
       </button>
 
@@ -136,7 +143,12 @@ export const SheetSelect = ({ value, options, onChange, onOther, label, invalid,
                   onClick={() => pick(option.value)}
                   className={`flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition ${active ? 'bg-primary font-black text-background' : 'font-bold text-white/85 hover:bg-white/10 hover:text-white'}`}
                 >
-                  <span className="min-w-0 break-words">{option.label}</span>
+                  {hasImages && (
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center">
+                      {option.image && <img src={option.image} alt="" loading="lazy" className="h-6 w-6 object-contain" />}
+                    </span>
+                  )}
+                  <span className="min-w-0 flex-1 break-words">{option.label}</span>
                   {active && <Check className="h-4 w-4 shrink-0" />}
                 </button>
               );
@@ -150,7 +162,7 @@ export const SheetSelect = ({ value, options, onChange, onOther, label, invalid,
                   onClick={() => { setOpen(false); onOther(); }}
                   className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-white transition hover:bg-white/10"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Outra
+                  <Plus className="h-3.5 w-3.5" /> {otherLabel}
                 </button>
               )}
               {value && (

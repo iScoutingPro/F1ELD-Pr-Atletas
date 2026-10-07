@@ -33,6 +33,17 @@ export interface Athlete {
   contractStart?: string;
   contractEnd?: string;
   contractLink?: string;
+  // Preenchidos pelo App ao carregar, não vêm do banco: clubLogo passa a ser o escudo do cadastro de clubes (ou o do atleta, se o clube
+  // não tem); ownClubLogo guarda o escudo gravado no próprio atleta e loanClubLogo é o escudo do clube do empréstimo
+  ownClubLogo?: string;
+  loanClubLogo?: string;
+  // Arquivo do contrato enviado pelo app: caminho dentro do bucket "contracts" do Supabase Storage
+  contractFile?: string;
+  // Empréstimo atual (só em Negociados): o contrato continua com o clube dono; o empréstimo diz onde o atleta joga
+  onLoan?: boolean;
+  loanClub?: string;
+  loanStart?: string;
+  loanEnd?: string;
   contractGoals?: ContractGoal[];
   tacticalMeetings?: TacticalMeeting[];
   notes?: string;
@@ -117,7 +128,7 @@ export interface ScoutEntry {
 
 export type ScoutEntryInput = Omit<ScoutEntry, 'id' | 'createdAt'>;
 
-export type View = 'login' | 'dashboard' | 'calendar' | 'lancar-scout' | 'atletas-totais' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
+export type View = 'login' | 'dashboard' | 'calendar' | 'lancar-scout' | 'clubes' | 'atletas-totais' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
 export interface NavItem {
   id: View;

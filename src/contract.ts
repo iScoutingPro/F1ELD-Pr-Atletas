@@ -13,6 +13,34 @@ const entryDateKey = (entry: ScoutEntry) => {
   return date && /^\d{4}$/.test(entry.year.trim()) ? `${entry.year.trim()}-${date[2].padStart(2, '0')}-${date[1].padStart(2, '0')}` : '';
 };
 
+// Quanto falta para o término do contrato, em meses inteiros (em dias quando falta menos de um mês); null sem data de término
+export const contractTimeLeft = (endDate?: string, todayKey?: string): { text: string; expired: boolean } | null => {
+  const end = endDate ? new Date(`${endDate.slice(0, 10)}T00:00:00`) : null;
+  if (!end || Number.isNaN(end.getTime())) return null;
+  const today = todayKey ? new Date(`${todayKey}T00:00:00`) : new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((end.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return { text: 'Encerrado', expired: true };
+  if (days === 0) return { text: 'Termina hoje', expired: false };
+  const months = (end.getFullYear() - today.getFullYear()) * 12 + end.getMonth() - today.getMonth() - (end.getDate() < today.getDate() ? 1 : 0);
+  if (months < 1) return { text: days === 1 ? 'Falta 1 dia' : `Faltam ${days} dias`, expired: false };
+  return { text: months === 1 ? 'Falta 1 mês' : `Faltam ${months} meses`, expired: false };
+};
+
+// Clube do empréstimo em vigor hoje (marcado, com clube, já começado e ainda não encerrado); vazio quando não há
+export const activeLoanClub = (athlete: Athlete): string => {
+  const club = (athlete.loanClub || '').trim();
+  if (!athlete.onLoan || !club) return '';
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const start = athlete.loanStart?.slice(0, 10) || '';
+  const end = athlete.loanEnd?.slice(0, 10) || '';
+  return (start && start > today) || (end && end < today) ? '' : club;
+};
+
+// Nome do arquivo do contrato, tirado do caminho gravado ("pasta/nome.pdf")
+export const contractFileName = (path?: string) => (path || '').split('/').pop() || '';
+
 export interface GoalProgress {
   goal: ContractGoal;
   value: number;

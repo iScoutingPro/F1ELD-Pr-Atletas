@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutGrid, Users, CalendarRange, ClipboardList, LogOut, ChevronRight, Bell } from 'lucide-react';
+import { LayoutGrid, Users, CalendarRange, ClipboardList, Shield, LogOut, ChevronRight, Bell } from 'lucide-react';
 import { View, NavItem } from '../types';
 import { Logo } from './Logo';
 
@@ -22,6 +22,8 @@ export const SideNavBar = ({ activeView, setView, isAdmin, onLogout, onToggleNot
     { id: 'calendar', label: 'Calendário', icon: CalendarRange },
     // Lançamento do scout: só aparece para administradores
     ...(isAdmin ? [{ id: 'lancar-scout' as View, label: 'Scout', icon: ClipboardList }] : []),
+    // Cadastro de clubes (nome e escudo): só aparece para administradores
+    ...(isAdmin ? [{ id: 'clubes' as View, label: 'Clubes', icon: Shield }] : []),
   ];
 
   return (

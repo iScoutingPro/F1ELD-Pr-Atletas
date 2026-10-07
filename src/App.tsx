@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
-import { ArrowLeft, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { ArrowLeft, Download, FileText, CalendarDays, BarChart3, Presentation, ScrollText, Newspaper, Trophy, LogOut, AlertTriangle, Pencil, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, TacticalMeeting, View } from './types';
-import { contractGoalProgress, formatNumber } from './contract';
+import { activeLoanClub, contractFileName, contractGoalProgress, formatNumber } from './contract';
+import { BUILTIN_CLUBS, Club, clubKey, clubLogoMap, mergeClubs } from './clubs';
+import type { ClubInput } from './views/ClubsView';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
@@ -31,6 +33,7 @@ const SettingsView = lazyNamed(() => import('./views/SettingsView'), 'SettingsVi
 const EditProfileView = lazyNamed(() => import('./views/EditProfileView'), 'EditProfileView');
 const CalendarView = lazyNamed(() => import('./views/CalendarView'), 'CalendarView');
 const ScoutEntryView = lazyNamed(() => import('./views/ScoutEntryView'), 'ScoutEntryView');
+const ClubsView = lazyNamed(() => import('./views/ClubsView'), 'ClubsView');
 
 // Enquanto a parte da tela é baixada
 const LoadingPanel = () => (
@@ -97,6 +100,26 @@ const scoutErrorNotice = (title: string, error: { code?: string; message: string
   return { title, message: error.message };
 };
 
+// Clubes cadastrados na aba Clubes: tabela clubs e bucket público dos escudos (supabase/clubs.sql)
+const CLUB_LOGO_BUCKET = 'club-logos';
+const mapClubRow = (c: any): Club => ({ id: c.id, name: c.name, logo: c.logo_url || '', hidden: !!c.hidden });
+// Caminho do escudo dentro do bucket, tirado do endereço público gravado
+const clubLogoPath = (url?: string) => (url || '').split(`/${CLUB_LOGO_BUCKET}/`)[1] || '';
+const clubErrorNotice = (title: string, error: { code?: string; message: string }): Notice => {
+  console.error(title, error);
+  const missingGrant = /permission denied for table/i.test(error.message);
+  if (/row-level security|unauthorized|not authorized/i.test(error.message) || (error.code === RLS_VIOLATION_CODE && !missingGrant)) {
+    return notAllowedMessage('alterar', 'clubes');
+  }
+  if (missingGrant || /bucket not found/i.test(error.message) || (error.code && MISSING_TABLE_CODES.includes(error.code))) {
+    return {
+      title: 'Clubes não configurados',
+      message: 'O banco de dados ainda não está preparado para os clubes. Execute o arquivo supabase/clubs.sql no SQL Editor do Supabase e tente de novo.',
+    };
+  }
+  return { title, message: error.message };
+};
+
 const mapScoutRow = (s: any): ScoutEntry => ({
   id: s.id,
   athleteId: s.athlete_id,
@@ -127,6 +150,19 @@ const scoutPayload = (entry: ScoutEntryInput) => ({
 });
 
 // Traduz o erro do Supabase para um aviso legível na interface
+// Arquivos de contrato: bucket privado do Supabase Storage (supabase/contract_files.sql)
+const CONTRACT_BUCKET = 'contracts';
+const contractFileNotice = (title: string, error: { message: string; statusCode?: string | number }): Notice => {
+  console.error(title, error);
+  if (/bucket not found/i.test(error.message)) {
+    return { title: 'Arquivos de contrato não configurados', message: 'O envio de arquivos ainda não foi configurado no Supabase. Nenhum arquivo foi enviado.' };
+  }
+  if (/row-level security|unauthorized|not authorized/i.test(error.message)) {
+    return notAllowedMessage('enviar ou abrir', 'arquivos de contrato');
+  }
+  return { title, message: error.message };
+};
+
 const errorNotice = (title: string, error: { code?: string; message: string }): Notice => {
   if (error.code === MISSING_COLUMN_CODE) {
     return {
@@ -168,6 +204,11 @@ const mapAthleteRow = (a: any): Athlete => ({
   contractStart: a.contract_start,
   contractEnd: a.contract_end,
   contractLink: a.contract_link,
+  contractFile: a.contract_file || undefined,
+  onLoan: a.on_loan ?? false,
+  loanClub: a.loan_club,
+  loanStart: a.loan_start,
+  loanEnd: a.loan_end,
   contractGoals: a.contract_goals || [],
   tacticalMeetings: (Array.isArray(a.tactical_meetings) ? a.tactical_meetings : []).map((m: TacticalMeeting) => ({ ...m, materials: m.materials || [] })),
   source: a.source || 'Captado',
@@ -206,7 +247,34 @@ const saveIds = (key: string, ids: string[]) => {
 
 export default function App() {
   const [view, setView] = useState<View>('login');
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  // Atletas como vêm do banco; a lista usada pelas telas é `athletes`, logo abaixo, já com os escudos do cadastro de clubes
+  const [rawAthletes, setAthletes] = useState<Athlete[]>([]);
+  // Clubes cadastrados na aba Clubes (os principais do Brasil já vêm no app, em src/clubs.ts)
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const allClubs = useMemo(() => mergeClubs(clubs), [clubs]);
+  const registryLogos = useMemo(() => clubLogoMap(allClubs), [allClubs]);
+  // Escudos enviados nos cadastros de atleta antes de existir a aba Clubes: valem para o clube que não tem escudo lá
+  const athleteLogos = useMemo(() => {
+    const logos = new Map<string, string>();
+    rawAthletes.forEach((athlete) => {
+      const key = clubKey(athlete.club);
+      if (key && athlete.clubLogo && !logos.has(key)) logos.set(key, athlete.clubLogo);
+    });
+    return logos;
+  }, [rawAthletes]);
+  // Escudo de um clube pelo nome: primeiro o do cadastro de clubes, depois o de algum atleta daquele clube
+  const resolveClubLogo = (club?: string | null) => {
+    const key = clubKey(club || '');
+    return key ? registryLogos.get(key) || athleteLogos.get(key) : undefined;
+  };
+  // Só para atleta vindo do banco (mapAthleteRow): aplicar de novo trocaria o escudo próprio pelo do cadastro
+  const enrichAthlete = (athlete: Athlete): Athlete => ({
+    ...athlete,
+    ownClubLogo: athlete.clubLogo,
+    clubLogo: resolveClubLogo(athlete.club) || athlete.clubLogo,
+    loanClubLogo: resolveClubLogo(athlete.loanClub),
+  });
+  const athletes = useMemo(() => rawAthletes.map(enrichAthlete), [rawAthletes, registryLogos, athleteLogos]);
   const [selectedAthlete, setSelectedAthlete] = useState<Athlete | null>(null);
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
   // Lista escolhida na pergunta do "Adicionar atleta", guardada na abertura do cadastro
@@ -221,6 +289,8 @@ export default function App() {
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  // Arquivo do contrato aberto dentro do app (endereços temporários do Storage)
+  const [contractViewer, setContractViewer] = useState<{ name: string; url: string; downloadUrl: string } | null>(null);
   // O sino do menu lateral abre e fecha a central de notificações do painel e mostra quantas não foram lidas
   const [showNotifications, setShowNotifications] = useState(false);
   // Lidas e limpas: por pessoa na tabela notification_reads; sem ela (SQL ainda não rodado), só neste navegador
@@ -562,6 +632,13 @@ export default function App() {
       return true;
     };
 
+    const fetchClubs = async () => {
+      const { data, error } = await supabase.from('clubs').select('*');
+      if (error) return !loadFailed('clubes', error);
+      setClubs((data ?? []).map(mapClubRow));
+      return true;
+    };
+
     const safely = (load: () => Promise<boolean>) =>
       load().catch(err => {
         console.error('Erro ao carregar dados:', err);
@@ -569,7 +646,7 @@ export default function App() {
       });
 
     // Sem a lista de exemplo: se algo não carregar, o usuário é avisado em vez de ver dados incompletos sem saber
-    Promise.all([safely(fetchAthletes), safely(fetchGames), safely(fetchScoutEntries)]).then(results => {
+    Promise.all([safely(fetchAthletes), safely(fetchGames), safely(fetchScoutEntries), safely(fetchClubs)]).then(results => {
       if (results.includes(false)) {
         setNotice({
           title: 'Dados não carregados',
@@ -647,7 +724,8 @@ export default function App() {
 
   const navigateTo = (next: View) => setView(next);
 
-  const handleSaveAthlete = async (athleteData: Partial<Athlete>) => {
+  // contractUpload: arquivo de contrato escolhido no formulário, enviado ao Storage antes de gravar o atleta
+  const handleSaveAthlete = async (athleteData: Partial<Athlete>, contractUpload?: File) => {
     if (!isAdmin) {
       setNotice(notAllowedMessage(selectedAthlete ? 'editar' : 'cadastrar'));
       return;
@@ -704,6 +782,10 @@ export default function App() {
         contractStart: athleteData.contractStart,
         contractEnd: athleteData.contractEnd,
         contractLink: athleteData.contractLink,
+        onLoan: athleteData.onLoan,
+        loanClub: athleteData.loanClub,
+        loanStart: athleteData.loanStart,
+        loanEnd: athleteData.loanEnd,
         contractGoals: selectedAthlete?.contractGoals,
         tacticalMeetings: selectedAthlete?.tacticalMeetings,
         notes: athleteData.notes,
@@ -759,6 +841,16 @@ export default function App() {
       contract_start: athleteData.contractStart || null,
       contract_end: athleteData.contractEnd || null,
       contract_link: athleteData.contractLink || null,
+      // Arquivo do contrato: a coluna só vai quando há arquivo a gravar ou a apagar (mesma razão do empréstimo, abaixo)
+      ...(athleteData.contractFile || selectedAthlete?.contractFile ? { contract_file: athleteData.contractFile || null } : {}),
+      // Empréstimo: as colunas só vão quando há empréstimo a gravar ou a apagar, para os outros atletas
+      // continuarem salvando antes de o arquivo SQL ser rodado de novo
+      ...(athleteData.onLoan || selectedAthlete?.onLoan || selectedAthlete?.loanClub ? {
+        on_loan: athleteData.onLoan ?? false,
+        loan_club: athleteData.loanClub || null,
+        loan_start: athleteData.loanStart || null,
+        loan_end: athleteData.loanEnd || null,
+      } : {}),
       notes: athleteData.notes,
       has_dvd: athleteData.hasDvd,
       dvd_link: athleteData.dvdLink,
@@ -768,6 +860,23 @@ export default function App() {
     };
 
     let error: any = null;
+
+    // Envia o arquivo do contrato primeiro; se o envio falhar, nada é gravado
+    let uploadedFile = '';
+    // Linha devolvida pelo banco na edição: é com ela que o perfil reabre depois de salvar
+    let savedRow: any = null;
+    if (contractUpload) {
+      const safeName = contractUpload.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w.-]+/g, '-');
+      const path = `${crypto.randomUUID()}/${safeName}`;
+      const { error: uploadError } = await supabase.storage.from(CONTRACT_BUCKET).upload(path, contractUpload, { contentType: contractUpload.type || undefined });
+      if (uploadError) {
+        setNotice(contractFileNotice('Erro ao enviar o contrato', uploadError));
+        setLoading(false);
+        return;
+      }
+      uploadedFile = path;
+      Object.assign(payload, { contract_file: path });
+    }
     
     const isEditingRealAthlete = selectedAthlete && 
       UUID_PATTERN.test(selectedAthlete.id);
@@ -780,6 +889,7 @@ export default function App() {
         .eq('id', selectedAthlete.id)
         .select();
       error = updateError;
+      savedRow = updatedData?.[0] || null;
 
       // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
       if (!error && (!updatedData || updatedData.length === 0)) {
@@ -796,7 +906,7 @@ export default function App() {
           title: isNewDvd ? 'DVD ADICIONADO' : 'PERFIL ATUALIZADO',
           subtitle: `${athleteData.name} ${athleteData.lastName}`.toUpperCase(),
           club: payload.club,
-          club_logo: payload.club_logo,
+          club_logo: resolveClubLogo(payload.club) || payload.club_logo,
           athlete_id: selectedAthlete.id
         });
       }
@@ -814,7 +924,7 @@ export default function App() {
           title: listType === 'negociados' ? 'NOVO ATLETA NEGOCIADO' : 'NOVO ATLETA AGENCIADO',
           subtitle: `${athleteData.name} ${athleteData.lastName}`.toUpperCase(),
           club: payload.club,
-          club_logo: payload.club_logo,
+          club_logo: resolveClubLogo(payload.club) || payload.club_logo,
           athlete_id: insertedData[0].id
         });
       }
@@ -822,6 +932,8 @@ export default function App() {
 
     if (error) {
       console.error('Erro ao salvar atleta:', error);
+      // O atleta não foi gravado: o arquivo enviado agora não fica sobrando no Storage
+      if (uploadedFile) supabase.storage.from(CONTRACT_BUCKET).remove([uploadedFile]);
       if (error.code === RLS_VIOLATION_CODE) {
         setNotice(notAllowedMessage(isEditingRealAthlete ? 'editar' : 'cadastrar'));
       } else {
@@ -829,19 +941,149 @@ export default function App() {
       }
     } else {
       console.log('Atleta salvo com sucesso!');
-      setSelectedAthlete(null);
-      setIsAddingAthlete(false);
-      
+      // Arquivo antigo trocado ou removido: apaga do Storage (se falhar, só fica sobrando lá)
+      const oldFile = selectedAthlete?.contractFile;
+      if (oldFile && oldFile !== (uploadedFile || athleteData.contractFile || '')) {
+        supabase.storage.from(CONTRACT_BUCKET).remove([oldFile]).then(({ error: removeError }) => {
+          if (removeError) console.error('Erro ao apagar o arquivo antigo do contrato:', removeError);
+        });
+      }
+      // Na edição volta ao perfil do atleta, já com os dados novos; no cadastro vai para a Carteira de Atletas
+      if (savedRow) {
+        openAthleteProfile(enrichAthlete(mapAthleteRow(savedRow)));
+      } else {
+        setSelectedAthlete(null);
+        setIsAddingAthlete(false);
+        returnToList();
+      }
+
       const { data, error: fetchError } = await supabase.from('athletes').select('*');
       if (fetchError) {
         console.error('Erro ao atualizar lista local:', fetchError);
       } else if (data) {
         setAthletes(data.map(mapAthleteRow));
       }
-      returnToList();
     }
     
     setLoading(false);
+  };
+
+  // Abre o arquivo do contrato dentro do app: o bucket é privado, então o endereço é temporário (1 hora)
+  const openContractFile = async (athlete: Athlete) => {
+    if (!athlete.contractFile || !supabase) return;
+    const name = contractFileName(athlete.contractFile);
+    const storage = supabase.storage.from(CONTRACT_BUCKET);
+    const [view, download] = await Promise.all([
+      storage.createSignedUrl(athlete.contractFile, 3600),
+      storage.createSignedUrl(athlete.contractFile, 3600, { download: name }),
+    ]);
+    if (view.error || !view.data) {
+      setNotice(contractFileNotice('Erro ao abrir o contrato', view.error || { message: 'Arquivo não encontrado.' }));
+      return;
+    }
+    setContractViewer({ name, url: view.data.signedUrl, downloadUrl: download.data?.signedUrl || view.data.signedUrl });
+  };
+
+  // Baixa o arquivo do contrato direto, sem abrir a janela de visualização
+  const downloadContractFile = async (athlete: Athlete) => {
+    if (!athlete.contractFile || !supabase) return;
+    const name = contractFileName(athlete.contractFile);
+    const { data, error } = await supabase.storage.from(CONTRACT_BUCKET).createSignedUrl(athlete.contractFile, 3600, { download: name });
+    if (error || !data) {
+      setNotice(contractFileNotice('Erro ao baixar o contrato', error || { message: 'Arquivo não encontrado.' }));
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = data.signedUrl;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Grava um ou mais clubes da aba Clubes (cadastro, edição ou envio de vários escudos). Devolve true quando todos foram gravados
+  const handleSaveClubs = async (inputs: ClubInput[]) => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('alterar', 'clubes'));
+      return false;
+    }
+    if (!hasSupabaseConfig || !supabase) return false;
+
+    let failed = false;
+    for (const input of inputs) {
+      // Clube apagado antes e cadastrado de novo: reaproveita a linha que o escondia
+      const current = input.id
+        ? clubs.find((club) => club.id === input.id)
+        : clubs.find((club) => club.hidden && clubKey(club.name) === clubKey(input.name));
+      let logoUrl: string | undefined;
+      let uploadedPath = '';
+      if (input.file) {
+        const extension = (input.file.name.match(/\.([a-z0-9]+)$/i)?.[1] || 'png').toLowerCase();
+        uploadedPath = `${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await supabase.storage.from(CLUB_LOGO_BUCKET).upload(uploadedPath, input.file, { contentType: input.file.type || undefined });
+        if (uploadError) {
+          setNotice(clubErrorNotice('Erro ao enviar o escudo', uploadError));
+          failed = true;
+          break;
+        }
+        logoUrl = supabase.storage.from(CLUB_LOGO_BUCKET).getPublicUrl(uploadedPath).data.publicUrl;
+      }
+
+      // Sem arquivo novo, o clube que já vem no app leva o escudo que tinha
+      const keptLogo = !current && input.logo ? input.logo : undefined;
+      const row = { name: input.name, ...(logoUrl || keptLogo ? { logo_url: logoUrl || keptLogo } : {}), ...(current?.hidden ? { hidden: false } : {}) };
+      const { data, error } = current
+        ? await supabase.from('clubs').update(row).eq('id', current.id).select()
+        : await supabase.from('clubs').insert([row]).select();
+      // RLS bloqueia o update sem retornar erro: nenhuma linha é alterada
+      if (error || !data || data.length === 0) {
+        if (uploadedPath) supabase.storage.from(CLUB_LOGO_BUCKET).remove([uploadedPath]);
+        setNotice(error ? clubErrorNotice('Erro ao salvar o clube', error) : notAllowedMessage('alterar', 'clubes'));
+        failed = true;
+        break;
+      }
+      // Clube que já vem no app e mudou de nome: o nome antigo é escondido, senão voltaria a aparecer ao lado do novo
+      const oldName = current && !current.hidden ? current.name : input.replaces;
+      const oldKey = clubKey(oldName);
+      if (oldName && oldKey !== clubKey(input.name) && BUILTIN_CLUBS.some((item) => clubKey(item.name) === oldKey)
+        && !clubs.some((club) => club.hidden && clubKey(club.name) === oldKey)) {
+        const { error: hideError } = await supabase.from('clubs').insert([{ name: oldName, logo_url: null, hidden: true }]);
+        if (hideError) console.error('Erro ao esconder o nome antigo do clube:', hideError);
+      }
+      // Escudo trocado: o arquivo antigo sai do Storage (se falhar, só fica sobrando lá)
+      const oldPath = logoUrl ? clubLogoPath(current?.logo) : '';
+      if (oldPath) supabase.storage.from(CLUB_LOGO_BUCKET).remove([oldPath]);
+    }
+
+    // Recarrega mesmo quando parou no meio, para a lista mostrar o que chegou a ser gravado
+    const { data: rows } = await supabase.from('clubs').select('*');
+    if (rows) setClubs(rows.map(mapClubRow));
+    return !failed;
+  };
+
+  const handleDeleteClub = async (club: Club) => {
+    if (!isAdmin) {
+      setNotice(notAllowedMessage('excluir', 'clubes'));
+      return false;
+    }
+    if (!hasSupabaseConfig || !supabase) return false;
+    // Clube que já vem no app não tem como sair do código: uma linha no banco passa a escondê-lo. Os demais são apagados de vez
+    const isBuiltin = BUILTIN_CLUBS.some((item) => clubKey(item.name) === clubKey(club.name));
+    const hiddenRow = { name: club.name, logo_url: null, hidden: true };
+    const { data, error } = !isBuiltin
+      ? await supabase.from('clubs').delete().eq('id', club.id || '').select()
+      : club.id
+        ? await supabase.from('clubs').update(hiddenRow).eq('id', club.id).select()
+        : await supabase.from('clubs').insert([hiddenRow]).select();
+    if (error || !data || data.length === 0) {
+      setNotice(error ? clubErrorNotice('Erro ao excluir o clube', error) : notAllowedMessage('excluir', 'clubes'));
+      return false;
+    }
+    const path = clubLogoPath(club.logo);
+    if (path) supabase.storage.from(CLUB_LOGO_BUCKET).remove([path]);
+    const { data: rows } = await supabase.from('clubs').select('*');
+    if (rows) setClubs(rows.map(mapClubRow));
+    return true;
   };
 
   const handleDeleteAthlete = async (id: string) => {
@@ -881,6 +1123,8 @@ export default function App() {
         return;
       }
       console.log('Atleta apagado do banco com sucesso');
+      const deletedFile = deletedData[0]?.contract_file;
+      if (deletedFile) supabase.storage.from(CONTRACT_BUCKET).remove([deletedFile]);
     } else {
       console.log('ID não é UUID, removendo apenas localmente');
     }
@@ -1252,10 +1496,13 @@ export default function App() {
           onSelectAthlete={openAthleteProfile}
           onSaveGame={isAdmin ? handleSaveGame : undefined}
           onDeleteGame={isAdmin ? handleDeleteGame : undefined}
+          clubLogoOf={resolveClubLogo}
         />
       );
       // Só admin lança scout; os demais caem no painel (default)
       case 'lancar-scout': if (isAdmin) return <ScoutEntryView entries={scoutEntries} athletes={athletes} games={games} onSave={handleSaveScoutEntries} onDelete={handleDeleteScoutEntry} />;
+      // Só admin cadastra clubes; os demais caem no painel (default)
+      case 'clubes': if (isAdmin) return <ClubsView clubs={allClubs} onSave={handleSaveClubs} onDelete={handleDeleteClub} />;
       default: return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} />;
     }
   };
@@ -1277,46 +1524,47 @@ export default function App() {
 
       {(selectedAthlete && isViewingAthleteProfile) ? (
         <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/65 px-2 py-4 backdrop-blur-sm sm:px-4 sm:py-8">
-          <div className="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
+          <div className="relative w-full max-w-5xl overflow-hidden rounded-[32px] border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]">
             <div className="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-primary/15 via-primary/5 to-transparent" />
             <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
 
             <div className="relative px-4 pb-6 pt-5 sm:px-10 sm:pb-8 sm:pt-10">
               {/* Em tela estreita os botões sobem para cima da foto e do nome; a partir de `md` ficam à direita */}
               <div className="flex flex-col-reverse gap-5 md:flex-row md:items-center md:justify-between md:gap-4">
-                <div className="flex min-w-0 items-center gap-4 md:flex-1 md:justify-center md:gap-5">
+                <div className="flex min-w-0 items-center gap-4 md:flex-1 md:justify-center md:gap-6">
                   <button
                     type="button"
                     onClick={() => athleteImageInputRef.current?.click()}
-                    className="group relative h-20 w-20 md:h-28 md:w-28 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/70 ring-offset-4 ring-offset-[#17191c] transition hover:scale-[1.02]"
+                    className="group relative h-20 w-20 md:h-36 md:w-36 shrink-0 overflow-hidden rounded-full bg-surface-high shadow-[0_16px_40px_rgba(0,0,0,0.55)] ring-2 ring-primary/70 ring-offset-4 ring-offset-[#17191c] transition hover:scale-[1.02]"
                     aria-label="Trocar foto do atleta"
                   >
                     <img src={selectedAthlete.image} alt={selectedAthlete.name} className="h-full w-full object-cover" />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition group-hover:opacity-100">
-                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white">Editar</span>
+                      <span className="text-[9px] font-black uppercase tracking-[0.2em] text-white md:text-[11px]">Editar</span>
                     </div>
                   </button>
 
                   <div className="min-w-0 flex-1">
-                    <h2 className="break-words text-2xl font-black uppercase italic leading-none text-white md:truncate md:text-3xl">
+                    <h2 className="break-words text-2xl font-black uppercase italic leading-none text-white md:truncate md:text-[2rem]">
                       {selectedAthlete.name} {selectedAthlete.lastName}
                     </h2>
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em]">
+                    <div className="mt-4 flex flex-wrap items-center gap-2 text-[9px] font-black uppercase tracking-[0.18em] md:text-[11px] md:[&>span]:px-4 md:[&>span]:py-2">
                       <span className="rounded-full bg-primary px-3 py-1.5 text-background">{selectedAthlete.position}</span>
                       <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-on-surface">{selectedAthlete.category}</span>
                       <span className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-on-surface">
-                        {selectedAthlete.clubLogo && (
-                          <img src={selectedAthlete.clubLogo} alt="" className="h-3.5 w-3.5 object-contain" />
+                        {/* Emprestado: mostra o clube onde o atleta está, com o escudo dele */}
+                        {(activeLoanClub(selectedAthlete) ? selectedAthlete.loanClubLogo : selectedAthlete.clubLogo) && (
+                          <img src={activeLoanClub(selectedAthlete) ? selectedAthlete.loanClubLogo : selectedAthlete.clubLogo} alt="" className="h-3.5 w-3.5 object-contain md:h-[18px] md:w-[18px]" />
                         )}
-                        {selectedAthlete.club}
+                        {activeLoanClub(selectedAthlete) || selectedAthlete.club}
                       </span>
                     </div>
-                    <p className="mt-3 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant">
+                    <p className="mt-3 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant md:mt-4 md:text-[11px]">
                       Contrato: <span className="text-primary">{selectedAthlete.contractLevel || '—'}</span>
                     </p>
                     {/* Atleta nas duas listas: troca entre o cadastro de Agenciados e o de Negociados sem sair do perfil */}
                     {selectedTwin && (
-                      <div className="mt-3 inline-flex rounded-full border border-white/10 bg-black/30 p-1 text-[9px] font-black uppercase tracking-[0.18em]">
+                      <div className="mt-3 inline-flex rounded-full border border-white/10 bg-black/30 p-1 text-[9px] font-black uppercase tracking-[0.18em] md:text-[11px]">
                         {(['agenciados', 'negociados'] as const).map(list => {
                           const active = (selectedAthlete.listType || 'agenciados') === list;
                           return (
@@ -1325,7 +1573,7 @@ export default function App() {
                               type="button"
                               onClick={() => { if (!active) setSelectedAthlete(selectedTwin); }}
                               aria-pressed={active}
-                              className={`rounded-full px-3 py-1.5 transition ${active ? 'bg-primary text-background' : 'text-on-surface-variant hover:text-white'}`}
+                              className={`rounded-full px-3 py-1.5 transition md:px-4 md:py-2 ${active ? 'bg-primary text-background' : 'text-on-surface-variant hover:text-white'}`}
                             >
                               {list === 'agenciados' ? 'Agenciado' : 'Negociado'}
                             </button>
@@ -1342,34 +1590,34 @@ export default function App() {
                       <button
                         type="button"
                         onClick={openEditAthlete}
-                        className="flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-5 text-[9px] font-black uppercase tracking-[0.2em] text-background shadow-[0_8px_24px_rgba(255,255,255,0.14)] transition hover:scale-[1.03] hover:shadow-[0_10px_30px_rgba(255,255,255,0.22)]"
+                        className="flex h-10 flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-primary px-5 text-[9px] md:h-12 md:px-6 md:text-[11px] font-black uppercase tracking-[0.2em] text-background shadow-[0_8px_24px_rgba(255,255,255,0.14)] transition hover:scale-[1.03] hover:shadow-[0_10px_30px_rgba(255,255,255,0.22)]"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="h-3.5 w-3.5 md:h-4 md:w-4" />
                         Editar perfil
                       </button>
                     )}
                     <button
                       type="button"
                       onClick={closeAthleteModal}
-                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-error/40 bg-error/15 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:scale-[1.05] hover:bg-error hover:text-white hover:shadow-[0_8px_24px_rgba(239,68,68,0.35)]"
+                      className="flex h-10 w-10 md:h-12 md:w-12 shrink-0 items-center justify-center rounded-full border border-error/40 bg-error/15 text-error shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition hover:scale-[1.05] hover:bg-error hover:text-white hover:shadow-[0_8px_24px_rgba(239,68,68,0.35)]"
                       aria-label="Fechar"
                       title="Fechar"
                     >
-                      <X className="h-4 w-4" />
+                      <X className="h-4 w-4 md:h-5 md:w-5" />
                     </button>
                   </div>
-                  <div className="flex flex-1 items-center justify-between gap-1.5 md:flex-none rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur">
+                  <div className="flex flex-1 items-center justify-between gap-1.5 md:flex-none md:gap-2 md:p-2 rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur">
                     {[{ key: 'calendar', icon: CalendarDays, label: 'Calendário' }, { key: 'stats', icon: BarChart3, label: 'Scout' }, { key: 'tactical', icon: Presentation, label: 'Acompanhamento Tático' }, { key: 'contract', icon: ScrollText, label: 'Contrato' }, { key: 'pdf', icon: FileText, label: 'PDF' }].map(({ key, icon: Icon, label }) => (
                       <button
                         key={key}
                         type="button"
                         // Clicar de novo no ícone aberto volta para as informações do perfil
                         onClick={() => setProfileDetailView(prev => (prev === key ? null : key as 'calendar' | 'stats' | 'tactical' | 'contract' | 'pdf'))}
-                        className={`flex h-9 flex-1 md:w-9 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
+                        className={`flex h-9 flex-1 md:h-11 md:w-11 md:flex-none items-center justify-center rounded-xl border transition hover:-translate-y-0.5 hover:border-primary hover:bg-primary hover:text-background hover:shadow-[0_8px_20px_rgba(255,255,255,0.2)] ${profileDetailView === key ? 'border-primary bg-primary text-background' : 'border-white/5 bg-white/[0.04] text-white/75'}`}
                         aria-label={label}
                         title={label}
                       >
-                        <Icon className="h-4 w-4" />
+                        <Icon className="h-4 w-4 md:h-5 md:w-5" />
                       </button>
                     ))}
                   </div>
@@ -1411,11 +1659,13 @@ export default function App() {
                   entries={scoutEntriesOf(selectedAthlete)}
                   isAdmin={isAdmin}
                   onSaveGoals={(goals) => handleSaveContractGoals(selectedAthlete, goals)}
+                  onOpenContract={() => openContractFile(selectedAthlete)}
+                  onDownloadContract={() => downloadContractFile(selectedAthlete)}
                 />
               ) : profileDetailView === 'pdf' ? (
                 <AthletePdf athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} games={games} />
               ) : (
-                <AthleteInfo athlete={selectedAthlete} />
+                <AthleteInfo athlete={selectedAthlete} onOpenContract={() => openContractFile(selectedAthlete)} clubLogoOf={resolveClubLogo} />
               )}
               </Suspense>
             </div>
@@ -1442,8 +1692,11 @@ export default function App() {
                 athlete={selectedAthlete || undefined} 
                 onSave={handleSaveAthlete} 
                 onDelete={isAdmin ? handleDeleteAthlete : undefined}
-                onBack={closeAthleteModal} 
+                onBack={closeAthleteModal}
+                // Na edição, volta ao perfil do atleta sem salvar (o "X" e o "Cancelar" fecham tudo)
+                onBackToProfile={selectedAthlete && isEditingAthlete ? () => { setIsEditingAthlete(false); setIsViewingAthleteProfile(true); } : undefined} 
                 athletes={athletes}
+                clubs={allClubs}
                 listType={selectedAthlete?.listType ?? addingListType}
               />
             </Suspense>
@@ -1508,8 +1761,56 @@ export default function App() {
       </AnimatePresence>
 
       <AnimatePresence>
+        {contractViewer && (
+          <motion.div
+            key="contract-viewer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={() => setContractViewer(null)}
+            className="fixed inset-0 z-[85] flex items-center justify-center bg-black/75 p-2 backdrop-blur-md sm:p-6"
+          >
+            <div
+              onClick={(event) => event.stopPropagation()}
+              className="relative flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#17191c] shadow-[0_30px_80px_rgba(0,0,0,0.8)]"
+            >
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/60 to-transparent" />
+              <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-4 py-3 sm:px-6">
+                <div className="min-w-0 flex-1">
+                  <p className="text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant">Contrato</p>
+                  <p className="truncate text-sm font-bold text-white">{contractViewer.name}</p>
+                </div>
+                <a
+                  href={contractViewer.downloadUrl}
+                  className="inline-flex h-9 items-center gap-2 rounded-full bg-primary px-4 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Baixar
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setContractViewer(null)}
+                  className="flex h-9 w-9 shrink-0 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error transition hover:bg-error hover:text-white"
+                  aria-label="Fechar"
+                  title="Fechar"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              {/\.(png|jpe?g|webp)$/i.test(contractViewer.name) ? (
+                <div className="flex-1 overflow-auto bg-black/40 p-3">
+                  <img src={contractViewer.url} alt={contractViewer.name} className="mx-auto max-w-full" />
+                </div>
+              ) : (
+                <iframe src={contractViewer.url} title={contractViewer.name} className="w-full flex-1 bg-white" />
+              )}
+            </div>
+          </motion.div>
+        )}
         {notice && (
           <motion.div
+            key="notice"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Check, ExternalLink, Pencil, Plus, ScrollText, Target, Trash2, TrendingUp, Trophy } from 'lucide-react';
+import { Check, Download, ExternalLink, Eye, FileText, Pencil, Plus, ScrollText, Target, Trash2, TrendingUp, Trophy } from 'lucide-react';
 import { Athlete, ContractGoal, ScoutEntry } from '../types';
 import { SCOUT_FIELDS } from '../scout';
-import { contractGoalProgress, formatNumber } from '../contract';
+import { contractFileName, contractGoalProgress, contractTimeLeft, formatNumber } from '../contract';
 import { SheetSelect } from './SheetSelect';
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
@@ -48,10 +48,14 @@ interface AthleteContractProps {
   isAdmin: boolean;
   // Devolve true quando as metas foram gravadas
   onSaveGoals: (goals: ContractGoal[]) => Promise<boolean>;
+  // Abre dentro do app o arquivo de contrato enviado pelo formulário
+  onOpenContract?: () => void;
+  // Baixa esse arquivo direto
+  onDownloadContract?: () => void;
 }
 
 // Contrato do atleta (ícone Contrato do perfil): vigência, documento e as metas estipuladas no contrato, com o progresso de cada uma
-export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals }: AthleteContractProps) => {
+export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals, onOpenContract, onDownloadContract }: AthleteContractProps) => {
   const goals = athlete.contractGoals || [];
   // null = formulário fechado; 'new' = meta nova; senão o id da meta em edição
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,12 +71,10 @@ export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals }: Athl
   const end = toDate(athlete.contractEnd);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const DAY = 86400000;
   const elapsedPercent = start && end && end > start
     ? Math.max(0, Math.min(100, Math.round(((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100)))
     : null;
-  const daysLeft = end ? Math.round((end.getTime() - today.getTime()) / DAY) : null;
-  const hasContract = Boolean(athlete.contractLevel || start || end || athlete.contractLink);
+  const hasContract = Boolean(athlete.contractLevel || start || end || athlete.contractLink || athlete.contractFile);
 
   const progress = contractGoalProgress(athlete, entries);
   const doneCount = progress.filter((item) => item.status === 'done').length;
@@ -147,7 +149,7 @@ export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals }: Athl
               <div>
                 <p className={labelClass}>Situação</p>
                 <p className="mt-1 text-sm font-black text-white">
-                  {daysLeft === null ? '—' : daysLeft < 0 ? 'Encerrado' : daysLeft === 0 ? 'Termina hoje' : `Faltam ${daysLeft} ${daysLeft === 1 ? 'dia' : 'dias'}`}
+                  {contractTimeLeft(athlete.contractEnd)?.text || '—'}
                 </p>
               </div>
             </div>
@@ -169,18 +171,53 @@ export const AthleteContract = ({ athlete, entries, isAdmin, onSaveGoals }: Athl
               </div>
             )}
 
-            {athlete.contractLink && (
-              <a
-                href={athlete.contractLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 text-[9px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary hover:bg-primary hover:text-background"
-              >
-                <ScrollText className="h-3.5 w-3.5" />
-                Abrir contrato
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+            {/* Arquivo do contrato: sempre à mostra, com o arquivo enviado pelo formulário ou o aviso de que não há */}
+            <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 sm:p-4">
+              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${athlete.contractFile ? 'border-primary bg-primary text-background' : 'border-white/10 bg-white/[0.04] text-white/40'}`}>
+                <FileText className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1 basis-40">
+                <p className={labelClass}>Arquivo do contrato</p>
+                <p className={`mt-1 truncate text-sm font-black ${athlete.contractFile ? 'text-white' : 'text-white/50'}`}>
+                  {athlete.contractFile ? contractFileName(athlete.contractFile) : 'Nenhum arquivo enviado'}
+                </p>
+                {!athlete.contractFile && isAdmin && (
+                  <p className="mt-1 text-xs text-white/50">Envie o arquivo em "Editar perfil", em Informações contratuais.</p>
+                )}
+              </div>
+              {athlete.contractFile && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onOpenContract}
+                    className="inline-flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-[9px] font-black uppercase tracking-[0.2em] text-background transition hover:scale-[1.03]"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    Visualizar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDownloadContract}
+                    className="inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 text-[9px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary hover:bg-primary hover:text-background"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Baixar
+                  </button>
+                </>
+              )}
+              {!athlete.contractFile && athlete.contractLink && (
+                <a
+                  href={athlete.contractLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-10 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 text-[9px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary hover:bg-primary hover:text-background"
+                >
+                  <ScrollText className="h-3.5 w-3.5" />
+                  Abrir link do contrato
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+            </div>
           </div>
         ) : (
           <div className={`${panelClass} p-8 text-center`}>
