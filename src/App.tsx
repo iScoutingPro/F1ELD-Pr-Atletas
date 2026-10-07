@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 // Imports from Libs & Types
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, TacticalMeeting, View } from './types';
+import { contractGoalProgress, formatNumber } from './contract';
 
 // Imports from Components
 import { SideNavBar } from './components/SideNavBar';
@@ -12,8 +13,8 @@ import { AthleteInfo } from './components/AthleteInfo';
 
 // Imports from Views
 import { LoginView } from './views/LoginView';
-import { DashboardView } from './views/DashboardView';
-import { AtletasTotaisView, ListFilter } from './views/AtletasTotaisView';
+import { DashboardView, activityKey } from './views/DashboardView';
+import { AtletasTotaisView } from './views/AtletasTotaisView';
 import { RecoveryView, VerificationView } from './views/AuthSubViews';
 import { SecurityView, SuccessView } from './views/SecuritySubViews';
 
@@ -26,12 +27,8 @@ const AthleteScout = lazyNamed(() => import('./components/AthleteScout'), 'Athle
 const AthleteContract = lazyNamed(() => import('./components/AthleteContract'), 'AthleteContract');
 const AthleteTactical = lazyNamed(() => import('./components/AthleteTactical'), 'AthleteTactical');
 const AthletePdf = lazyNamed(() => import('./components/AthletePdf'), 'AthletePdf');
-const ScoutView = lazyNamed(() => import('./views/ScoutView'), 'ScoutView');
-const AgenciadosNegociadosView = lazyNamed(() => import('./views/AgenciadosNegociadosView'), 'AgenciadosNegociadosView');
-const AthletesListView = lazyNamed(() => import('./views/AthletesListView'), 'AthletesListView');
 const SettingsView = lazyNamed(() => import('./views/SettingsView'), 'SettingsView');
 const EditProfileView = lazyNamed(() => import('./views/EditProfileView'), 'EditProfileView');
-const SessionsView = lazyNamed(() => import('./views/SessionsView'), 'SessionsView');
 const CalendarView = lazyNamed(() => import('./views/CalendarView'), 'CalendarView');
 const ScoutEntryView = lazyNamed(() => import('./views/ScoutEntryView'), 'ScoutEntryView');
 
@@ -177,6 +174,36 @@ const mapAthleteRow = (a: any): Athlete => ({
   listType: a.list_type || 'agenciados',
 });
 
+// "2026-10-12" vira "12/10/2026"; com horário, "12/10/2026 às 15:00"
+const formatDay = (date?: string, time?: string) => {
+  const [year, month, day] = (date || '').slice(0, 10).split('-');
+  if (!year || !month || !day) return '';
+  return `${day}/${month}/${year}${time ? ` às ${time.slice(0, 5)}` : ''}`;
+};
+
+const UUID_PATTERN =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Cópia das notificações lidas e limpas neste navegador, usada só enquanto supabase/notification_reads.sql não foi rodado
+const READ_NOTIFICATIONS_KEY = 'fieldpro_read_notifications_v1';
+const CLEARED_NOTIFICATIONS_KEY = 'fieldpro_cleared_notifications_v1';
+
+const loadIds = (key: string): string[] => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveIds = (key: string, ids: string[]) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(ids));
+  } catch {
+    // Sem acesso ao armazenamento: vale só até recarregar a página
+  }
+};
+
 export default function App() {
   const [view, setView] = useState<View>('login');
   const [athletes, setAthletes] = useState<Athlete[]>([]);
@@ -184,8 +211,6 @@ export default function App() {
   const [isAddingAthlete, setIsAddingAthlete] = useState(false);
   // Lista escolhida na pergunta do "Adicionar atleta", guardada na abertura do cadastro
   const [addingListType, setAddingListType] = useState<'agenciados' | 'negociados'>('agenciados');
-  // Filtro de lista com que a aba Atletas Totais abre (os cards do painel abrem já filtrado)
-  const [totalsFilter, setTotalsFilter] = useState<ListFilter>('todos');
   const [isViewingAthleteProfile, setIsViewingAthleteProfile] = useState(false);
   const [isEditingAthlete, setIsEditingAthlete] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -196,9 +221,15 @@ export default function App() {
   const isAdmin = session?.user?.app_metadata?.role === 'admin';
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
-  // O sino do menu lateral abre e fecha a central de notificações do painel; o painel informa quantas não foram lidas
+  // O sino do menu lateral abre e fecha a central de notificações do painel e mostra quantas não foram lidas
   const [showNotifications, setShowNotifications] = useState(false);
-  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  // Lidas e limpas: por pessoa na tabela notification_reads; sem ela (SQL ainda não rodado), só neste navegador
+  const [readIds, setReadIds] = useState<string[]>(() => loadIds(READ_NOTIFICATIONS_KEY));
+  const [clearedIds, setClearedIds] = useState<string[]>(() => loadIds(CLEARED_NOTIFICATIONS_KEY));
+  const readsInDb = useRef(false);
+  const unreadNotifications = activities
+    .map(activityKey)
+    .filter(id => !clearedIds.includes(id) && !readIds.includes(id)).length;
   const toggleNotifications = () => {
     const open = view !== 'dashboard' || !showNotifications;
     setShowNotifications(open);
@@ -483,6 +514,23 @@ export default function App() {
       }
     };
 
+    // Sem a tabela notification_reads, lidas e limpas continuam só neste navegador (sem aviso na tela)
+    const fetchNotificationReads = async () => {
+      const { data, error } = await supabase
+        .from('notification_reads')
+        .select('activity_id, read_at, cleared_at')
+        .eq('user_id', session.user.id);
+      if (error) {
+        console.error('Erro ao carregar notificações lidas:', error);
+        readsInDb.current = false;
+        return;
+      }
+      readsInDb.current = true;
+      setReadIds((data ?? []).filter(row => row.read_at).map(row => String(row.activity_id)));
+      setClearedIds((data ?? []).filter(row => row.cleared_at).map(row => String(row.activity_id)));
+    };
+    fetchNotificationReads().catch(err => console.error('Erro ao carregar notificações lidas:', err));
+
     // Cada carga devolve false quando falhou (sem internet, por exemplo); tabela ainda não criada não conta como falha
     const loadFailed = (label: string, error: { code?: string; message: string }) => {
       console.error(`Erro ao carregar ${label}:`, error);
@@ -531,13 +579,18 @@ export default function App() {
     });
   }, [session]);
 
-  const recordActivity = async (activity: any) => {
+  // Grava uma ou mais linhas na central de notificações. Sem a coluna details (recent_activities.sql ainda não rodado de novo), grava sem o detalhe
+  const recordActivity = async (activity: any | any[]) => {
+    const rows = (Array.isArray(activity) ? activity : [activity]).filter(Boolean);
+    if (rows.length === 0 || !hasSupabaseConfig || !supabase) return;
     try {
-      const { error } = await supabase
-        .from('recent_activities')
-        .insert([activity]);
+      let { error } = await supabase.from('recent_activities').insert(rows);
+      if (error?.code === MISSING_COLUMN_CODE) {
+        ({ error } = await supabase.from('recent_activities').insert(rows.map(({ details, ...row }) => row)));
+      }
       if (error) throw error;
-      
+
+
       const { data } = await supabase
         .from('recent_activities')
         .select('*')
@@ -549,18 +602,50 @@ export default function App() {
     }
   };
 
-  // Depois de salvar ou apagar, quem está em Atletas Negociados continua nessa aba
+  // Colunas de atividade que apontam para um atleta (clicar na notificação abre o perfil dele)
+  const athleteActivity = (athlete: Athlete) => ({
+    subtitle: `${athlete.name} ${athlete.lastName || ''}`.trim().toUpperCase(),
+    club: athlete.club || null,
+    club_logo: athlete.clubLogo || null,
+    athlete_id: UUID_PATTERN.test(athlete.id) ? athlete.id : null,
+  });
+
+  // Metas do contrato que passam a estar batidas com uma gravação (meta manual ou soma do scout)
+  const goalActivities = (before: Athlete, after: Athlete, entriesBefore: ScoutEntry[], entriesAfter: ScoutEntry[]) => {
+    const doneBefore = new Set(contractGoalProgress(before, entriesBefore).filter(p => p.status === 'done').map(p => p.goal.id));
+    return contractGoalProgress(after, entriesAfter)
+      .filter(p => p.status === 'done' && !doneBefore.has(p.goal.id))
+      .map(p => ({
+        type: 'META',
+        title: 'META BATIDA',
+        details: `${p.goal.title}: ${formatNumber(p.value, p.isPercent)} de ${formatNumber(p.goal.target, p.isPercent)}`,
+        ...athleteActivity(after),
+      }));
+  };
+
+  // Marca notificações como lidas ou limpas para quem está logado; vale em todos os aparelhos da pessoa
+  const saveNotificationState = async (ids: string[], column: 'read_at' | 'cleared_at') => {
+    const storageKey = column === 'read_at' ? READ_NOTIFICATIONS_KEY : CLEARED_NOTIFICATIONS_KEY;
+    (column === 'read_at' ? setReadIds : setClearedIds)(prev => {
+      const next = Array.from(new Set([...prev, ...ids])).slice(-200);
+      if (!readsInDb.current) saveIds(storageKey, next);
+      return next;
+    });
+
+    if (!readsInDb.current || !supabase || !session) return;
+    const now = new Date().toISOString();
+    const rows = ids
+      .filter(id => UUID_PATTERN.test(id))
+      .map(activity_id => ({ user_id: session.user.id, activity_id, [column]: now }));
+    if (rows.length === 0) return;
+    const { error } = await supabase.from('notification_reads').upsert(rows, { onConflict: 'user_id,activity_id' });
+    if (error) console.error('Erro ao gravar notificação lida:', error);
+  };
+
+  // Depois de salvar ou apagar, volta para a Carteira de Atletas
   const returnToList = () => setView('atletas-totais');
 
-  // As abas Agenciados e Negociados saíram do menu: quem pedia uma delas vai para Atletas Totais já filtrado
-  const navigateTo = (next: View) => {
-    if (next === 'athletes' || next === 'negociados' || next === 'atletas-totais') {
-      setTotalsFilter(next === 'athletes' ? 'agenciados' : next === 'negociados' ? 'negociados' : 'todos');
-      setView('atletas-totais');
-      return;
-    }
-    setView(next);
-  };
+  const navigateTo = (next: View) => setView(next);
 
   const handleSaveAthlete = async (athleteData: Partial<Athlete>) => {
     if (!isAdmin) {
@@ -685,7 +770,7 @@ export default function App() {
     let error: any = null;
     
     const isEditingRealAthlete = selectedAthlete && 
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAthlete.id);
+      UUID_PATTERN.test(selectedAthlete.id);
 
     if (isEditingRealAthlete) {
       console.log('Atualizando atleta real com ID:', selectedAthlete.id);
@@ -776,7 +861,7 @@ export default function App() {
     setLoading(true);
     console.log('Apagando atleta com ID:', id);
     
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    const isUuid = UUID_PATTERN.test(id);
     
     if (isUuid) {
       const { data: deletedData, error } = await supabase.from('athletes').delete().eq('id', id).select();
@@ -822,7 +907,7 @@ export default function App() {
       return false;
     }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(athlete.id);
+    const isUuid = UUID_PATTERN.test(athlete.id);
     if (hasSupabaseConfig && supabase && isUuid) {
       const { data, error } = await supabase.from('athletes').update({ contract_goals: goals }).eq('id', athlete.id).select('id');
 
@@ -848,6 +933,9 @@ export default function App() {
       }
     }
 
+    const entries = scoutEntriesOf(athlete);
+    recordActivity(goalActivities(athlete, { ...athlete, contractGoals: goals }, entries, entries));
+
     setAthletes(prev => prev.map(a => (a.id === athlete.id ? { ...a, contractGoals: goals } : a)));
     setSelectedAthlete(prev => (prev && prev.id === athlete.id ? { ...prev, contractGoals: goals } : prev));
     return true;
@@ -860,7 +948,7 @@ export default function App() {
       return false;
     }
 
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(athlete.id);
+    const isUuid = UUID_PATTERN.test(athlete.id);
     if (hasSupabaseConfig && supabase && isUuid) {
       const { data, error } = await supabase.from('athletes').update({ tactical_meetings: meetings }).eq('id', athlete.id).select('id');
 
@@ -885,6 +973,15 @@ export default function App() {
         return false;
       }
     }
+
+    // Só reunião nova vira notificação; editar ou apagar uma reunião não
+    const knownMeetings = new Set((athlete.tacticalMeetings || []).map(meeting => meeting.id));
+    recordActivity(meetings.filter(meeting => !knownMeetings.has(meeting.id)).map(meeting => ({
+      type: 'TACTICAL',
+      title: 'NOVA REUNIÃO TÁTICA',
+      details: [meeting.title, formatDay(meeting.date, meeting.time)].filter(Boolean).join(' · '),
+      ...athleteActivity(athlete),
+    })));
 
     setAthletes(prev => prev.map(a => (a.id === athlete.id ? { ...a, tacticalMeetings: meetings } : a)));
     setSelectedAthlete(prev => (prev && prev.id === athlete.id ? { ...prev, tacticalMeetings: meetings } : prev));
@@ -957,6 +1054,19 @@ export default function App() {
 
     const savedGame = mapGameRow(data[0]);
     setGames(prev => [savedGame, ...prev.filter(g => g.id !== savedGame.id)]);
+
+    // Só jogo novo vira notificação; clicar nela leva ao Calendário
+    if (!id) {
+      recordActivity({
+        type: 'GAME',
+        title: 'NOVO JOGO NO CALENDÁRIO',
+        subtitle: `${payload.home} x ${payload.away}`.toUpperCase(),
+        details: [payload.competition, payload.category, formatDay(payload.game_date, payload.game_time || undefined)].filter(Boolean).join(' · '),
+        club: null,
+        club_logo: null,
+        athlete_id: null,
+      });
+    }
     return true;
   };
 
@@ -990,7 +1100,25 @@ export default function App() {
     }
 
     const saved = data.map(mapScoutRow);
+    const entriesAfter = [...saved, ...scoutEntries.filter(e => e.id !== editingId)];
     setScoutEntries(prev => [...saved, ...prev.filter(e => e.id !== editingId)]);
+
+    // Uma notificação por lançamento (não uma por atleta) e uma por meta do contrato que o scout fez bater
+    const goalRows = athletes
+      .filter(a => a.contractGoals?.length)
+      .flatMap(a => goalActivities(a, a, scoutEntriesOf(a), scoutEntriesOf(a, entriesAfter)));
+    let scoutRow = null;
+    if (!editingId) {
+      const savedAthletes = Array.from(new Set(saved.map(e => e.athleteId)))
+        .map(athleteId => athletes.find(a => a.id === athleteId))
+        .filter((a): a is Athlete => Boolean(a));
+      const matches = Array.from(new Set(saved.map(e => [e.competition, e.match].filter(Boolean).join(' · ')).filter(Boolean)));
+      const details = matches.length > 1 ? `${matches[0]} e mais ${matches.length - 1} partida(s)` : matches[0] || '';
+      scoutRow = savedAthletes.length === 1
+        ? { type: 'SCOUT', title: 'SCOUT LANÇADO', details, ...athleteActivity(savedAthletes[0]) }
+        : { type: 'SCOUT', title: 'SCOUT LANÇADO', subtitle: `${savedAthletes.length} ATLETAS`, details, club: null, club_logo: null, athlete_id: null };
+    }
+    recordActivity([scoutRow, ...goalRows]);
     return true;
   };
 
@@ -1021,11 +1149,11 @@ export default function App() {
   };
 
   // Scout do atleta no perfil. Quem está nas duas listas tem dois cadastros (mesmo nome completo e nascimento): valem os lançamentos dos dois
-  const scoutEntriesOf = (athlete: Athlete) => {
+  const scoutEntriesOf = (athlete: Athlete, entries: ScoutEntry[] = scoutEntries) => {
     const samePerson = (a: Athlete) => a.id === athlete.id
       || (Boolean(athlete.birthDate) && a.birthDate === athlete.birthDate && `${a.name} ${a.lastName}`.trim().toLowerCase() === `${athlete.name} ${athlete.lastName}`.trim().toLowerCase());
     const ids = new Set(athletes.filter(samePerson).map(a => a.id));
-    return scoutEntries.filter(e => ids.has(e.athleteId));
+    return entries.filter(e => ids.has(e.athleteId));
   };
 
   // O outro cadastro de quem está nas duas listas (mesmo nome completo e nascimento, como em buildEntries)
@@ -1112,21 +1240,8 @@ export default function App() {
       case 'login': return <LoginView onLogin={() => setView('dashboard')} onForgot={() => setView('recovery')} />;
       case 'recovery': return <RecoveryView onSend={handlePasswordResetRequest} onBack={() => setView('login')} />;
       case 'verification': return <VerificationView onBack={() => setView('login')} />;
-      case 'dashboard': return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} onNavigate={navigateTo} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} onUnreadChange={setUnreadNotifications} />;
-      // 'athletes' e 'negociados' não têm mais atalho na interface (tudo fica em Atletas Totais)
-      case 'athletes': return <AthletesListView athletes={athletes.filter(a => a.listType !== 'negociados')}onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? () => openAddAthlete('agenciados') : undefined} />;
-      case 'scout': return <ScoutView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
-      case 'negociados': return (
-        <AthletesListView
-          athletes={athletes.filter(a => a.listType === 'negociados')}
-          onSelectAthlete={openAthleteProfile}
-          onAddAthlete={isAdmin ? () => openAddAthlete('negociados') : undefined}
-          title="Atletas Negociados"
-        />
-      );
-      case 'agenciados-negociados': return <AgenciadosNegociadosView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
-      case 'atletas-totais': return <AtletasTotaisView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} initialListFilter={totalsFilter} />;
-      case 'sessions': return <SessionsView athletes={athletes} onSelectAthlete={openAthleteProfile} />;
+      case 'dashboard': return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} onNavigate={navigateTo} onOpenAthleteProfile={openAthleteProfile} activities={activities} showNotifications={showNotifications} readIds={readIds} clearedIds={clearedIds} onMarkRead={ids => saveNotificationState(ids, 'read_at')} onClearNotifications={ids => saveNotificationState(ids, 'cleared_at')} />;
+      case 'atletas-totais': return <AtletasTotaisView athletes={athletes} onSelectAthlete={openAthleteProfile} onAddAthlete={isAdmin ? openAddAthlete : undefined} />;
       case 'settings': return <SettingsView onLogout={confirmLogout} />;
       case 'security': return <SecurityView onComplete={handlePasswordUpdate} />;
       case 'success': return <SuccessView onBack={() => setView('login')} />;

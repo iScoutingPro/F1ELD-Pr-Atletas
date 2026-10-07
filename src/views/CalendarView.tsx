@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'motion/react';
 import { MapPin, Clock3, ChevronLeft, ChevronRight, Plus, Pencil, Search, Check, X, Trash2, Trophy } from 'lucide-react';
 import { Athlete, Game } from '../types';
+import { CATEGORIES } from '../categories';
 
 interface CalendarViewProps {
   games: Game[];
@@ -14,9 +15,6 @@ interface CalendarViewProps {
 }
 
 const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-
-// Mesma lista de EditProfileView e AthletesListView
-const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 
 const labelClass = 'ml-1 text-[9px] font-black uppercase tracking-[0.22em] text-on-surface-variant';
 const inputClass = 'w-full min-w-0 max-w-full rounded-xl border border-white/10 bg-surface-high px-4 py-3.5 text-sm font-bold text-on-surface outline-none transition placeholder:font-medium placeholder:text-on-surface-variant/40 focus:border-white/60 focus:ring-2 focus:ring-white/15';

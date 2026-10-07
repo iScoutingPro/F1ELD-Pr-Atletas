@@ -12,12 +12,10 @@ interface AtletasTotaisViewProps {
   onSelectAthlete?: (athlete: Athlete) => void;
   // Só para admin: abre o cadastro na lista escolhida na pergunta do botão "Adicionar atleta"
   onAddAthlete?: (list: ListType) => void;
-  // Filtro de lista com que a aba abre (os cards do painel abrem já em Agenciados ou Negociados)
-  initialListFilter?: ListFilter;
 }
 
 type ListType = 'agenciados' | 'negociados';
-export type ListFilter = 'todos' | ListType | 'dvd';
+type ListFilter = 'todos' | ListType | 'dvd';
 
 // Um cartão da tela: o atleta e as listas em que ele aparece
 interface Entry {
@@ -314,9 +312,9 @@ const AddAthleteDialog: React.FC<{ onPick: (list: ListType) => void; onClose: ()
   );
 };
 
-export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete, initialListFilter = 'todos' }: AtletasTotaisViewProps) => {
+export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: AtletasTotaisViewProps) => {
   const [search, setSearch] = useState('');
-  const [listFilter, setListFilter] = useState<ListFilter>(initialListFilter);
+  const [listFilter, setListFilter] = useState<ListFilter>('todos');
   const [askingList, setAskingList] = useState(false);
   const [category, setCategory] = useState('');
   const [position, setPosition] = useState('');

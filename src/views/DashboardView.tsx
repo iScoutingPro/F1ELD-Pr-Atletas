@@ -5,8 +5,7 @@ import { Athlete, Game, ScoutEntry, View } from '../types';
 import { scoutMonthKey } from '../scout';
 import { Logo } from '../components/Logo';
 import { buildEntries } from './AtletasTotaisView';
-
-const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
+import { CATEGORIES } from '../categories';
 
 // Mesmo padrão visual do resumo da aba Scout (ScoutOverview): painel em degradê com fio de luz no topo, quadro de ícone e linhas internas
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
@@ -26,8 +25,15 @@ interface DashboardViewProps {
   activities?: any[];
   // A central de notificações fica fechada até clicar no sino do menu lateral; aberta, o resto do painel some (atributo hidden)
   showNotifications?: boolean;
-  onUnreadChange?: (count: number) => void;
+  // Lidas e limpas ficam em App.tsx (por pessoa no banco, ou neste navegador sem a tabela notification_reads)
+  readIds?: string[];
+  clearedIds?: string[];
+  onMarkRead?: (ids: string[]) => void;
+  onClearNotifications?: (ids: string[]) => void;
 }
+
+// Id de cada notificação: o da linha de recent_activities (atividades muito antigas sem id usam a data)
+export const activityKey = (activity: any, index: number) => String(activity.id ?? activity.created_at ?? index);
 
 const getTimeAgo = (dateStr: string) => {
   const date = new Date(dateStr);
@@ -40,29 +46,6 @@ const getTimeAgo = (dateStr: string) => {
   if (diffInHours < 24) return `Há ${diffInHours}h`;
   const diffInDays = Math.floor(diffInHours / 24);
   return `Há ${diffInDays}d`;
-};
-
-// Notificações lidas ficam só neste navegador (a tabela recent_activities não guarda leitura)
-const READ_NOTIFICATIONS_KEY = 'fieldpro_read_notifications_v1';
-
-// "Limpar notificações" também vale só neste navegador: as linhas continuam no banco e nos outros aparelhos
-const CLEARED_NOTIFICATIONS_KEY = 'fieldpro_cleared_notifications_v1';
-
-const loadIds = (key: string): string[] => {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
-};
-
-const saveIds = (key: string, ids: string[]) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(ids));
-  } catch {
-    // Sem acesso ao armazenamento: vale só até recarregar a página
-  }
 };
 
 // Tipos gravados por recordActivity em App.tsx
@@ -79,12 +62,21 @@ const describeActivity = (activity: any) => {
       return { description: 'DVD adicionado ao perfil do atleta.', accent: 'text-green-400' };
     case 'ATHLETE_UPDATE':
       return { description: 'Informações do perfil foram atualizadas.', accent: 'text-yellow-300' };
+    // details (competição, data, tema, meta) só existe depois de rodar de novo supabase/recent_activities.sql
+    case 'SCOUT':
+      return { description: activity.details ? `Scout lançado: ${activity.details}.` : 'Novo scout lançado.', accent: 'text-primary' };
+    case 'GAME':
+      return { description: activity.details ? `Jogo cadastrado: ${activity.details}.` : 'Novo jogo cadastrado no Calendário.', accent: 'text-primary' };
+    case 'TACTICAL':
+      return { description: activity.details ? `Reunião tática: ${activity.details}.` : 'Nova reunião do acompanhamento tático.', accent: 'text-primary' };
+    case 'META':
+      return { description: activity.details ? `Meta do contrato batida: ${activity.details}.` : 'Meta do contrato batida.', accent: 'text-green-400' };
     default:
       return { description: activity.club ? `Clube: ${activity.club}` : '', accent: 'text-violet-300' };
   }
 };
 
-export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, onUnreadChange }: DashboardViewProps) => {
+export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavigate, onOpenAthleteProfile, activities = [], showNotifications = false, readIds = [], clearedIds = [], onMarkRead, onClearNotifications }: DashboardViewProps) => {
   const totalAthletes = athletes.length;
   // Mesmas contagens das abas: cada lista pelo listType e o total sem repetir quem está nas duas
   const negociadosCount = athletes.filter(a => a.listType === 'negociados').length;
@@ -167,14 +159,12 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
   );
 
   // A central de notificações mostra as linhas de recent_activities gravadas por recordActivity
-  const [readIds, setReadIds] = React.useState<string[]>(() => loadIds(READ_NOTIFICATIONS_KEY));
-  const [clearedIds, setClearedIds] = React.useState<string[]>(() => loadIds(CLEARED_NOTIFICATIONS_KEY));
-
   const notifications = activities.map((activity, index) => {
-    const id = String(activity.id ?? activity.created_at ?? index);
+    const id = activityKey(activity, index);
     const { description, accent } = describeActivity(activity);
     return {
       id,
+      type: activity.type as string | undefined,
       athleteId: activity.athlete_id as string | undefined,
       title: activity.title || 'Atualização',
       athleteName: activity.subtitle || '',
@@ -185,41 +175,30 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
     };
   }).filter(notification => !clearedIds.includes(notification.id));
 
-  const markAsRead = (ids: string[]) => {
-    setReadIds(prev => {
-      const next = Array.from(new Set([...prev, ...ids])).slice(-200);
-      saveIds(READ_NOTIFICATIONS_KEY, next);
-      return next;
-    });
-  };
+  const markAsRead = (ids: string[]) => onMarkRead?.(ids);
 
   // Some com as notificações atuais da lista; as novas continuam chegando
-  const handleClearNotifications = () => {
-    setClearedIds(prev => {
-      const next = Array.from(new Set([...prev, ...notifications.map(notification => notification.id)])).slice(-200);
-      saveIds(CLEARED_NOTIFICATIONS_KEY, next);
-      return next;
-    });
-  };
+  const handleClearNotifications = () => onClearNotifications?.(notifications.map(notification => notification.id));
 
   const handleMarkAllAsRead = () => markAsRead(notifications.map(notification => notification.id));
 
   const handleOpenNotification = (notification: typeof notifications[number]) => {
     markAsRead([notification.id]);
 
+    if (notification.type === 'GAME') {
+      onNavigate?.('calendar');
+      return;
+    }
+
     const athlete = resolveAthlete(notification.athleteId, notification.athleteName);
     if (athlete && onOpenAthleteProfile) {
       onOpenAthleteProfile(athlete);
       return;
     }
-    onNavigate?.('athletes');
+    onNavigate?.('atletas-totais');
   };
 
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
-  // O sino do menu lateral (celular) mostra este número
-  React.useEffect(() => {
-    onUnreadChange?.(unreadCount);
-  }, [unreadCount, onUnreadChange]);
 
   // Próximos jogos: os mesmos da aba Calendário (tabela games), de hoje em diante, por data e horário
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;

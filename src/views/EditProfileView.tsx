@@ -6,8 +6,8 @@ import { Athlete } from '../types';
 import { CountrySelect } from '../components/CountrySelect';
 import { ImageCropper } from '../components/ImageCropper';
 import { NATIONALITY_COUNTRIES, SECOND_NATIONALITY_COUNTRIES } from '../countries';
+import { CATEGORIES } from '../categories';
 
-const CATEGORIES = ['Profissional', 'Sub-20', 'Sub-17', 'Sub-15', 'Sub-14', 'Sub-13', 'Sub-12', 'Sub-11', 'Sub-10'];
 const POSITIONS = ['Goleiro', 'Lateral Esquerdo', 'Lateral Direito', 'Zagueiro', 'Volante', 'Meia', 'Extremo', 'Centroavante'];
 const FEET = ['Direito', 'Esquerdo', 'Ambidestro'];
 

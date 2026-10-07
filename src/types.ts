@@ -117,7 +117,7 @@ export interface ScoutEntry {
 
 export type ScoutEntryInput = Omit<ScoutEntry, 'id' | 'createdAt'>;
 
-export type View ='login' | 'dashboard' | 'calendar' | 'scout' | 'lancar-scout' | 'negociados' | 'agenciados-negociados' | 'atletas-totais' | 'athletes' | 'sessions' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
+export type View = 'login' | 'dashboard' | 'calendar' | 'lancar-scout' | 'atletas-totais' | 'settings' | 'security' | 'recovery' | 'verification' | 'success';
 
 export interface NavItem {
   id: View;

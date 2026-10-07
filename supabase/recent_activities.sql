@@ -12,6 +12,8 @@ alter table public.recent_activities add column if not exists subtitle text;
 alter table public.recent_activities add column if not exists club text;
 alter table public.recent_activities add column if not exists club_logo text;
 alter table public.recent_activities add column if not exists athlete_id uuid;
+-- Detalhe mostrado na central: competição e partida do scout, data do jogo, tema da reunião ou a meta batida
+alter table public.recent_activities add column if not exists details text;
 
 alter table public.recent_activities enable row level security;
 
