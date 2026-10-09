@@ -244,7 +244,7 @@ export const TechnicalProfile: React.FC<{ totals: Record<string, number>; refere
   const rows = RATES.map((rate) => ({
     label: rate.label,
     pct: scoutValue(fieldOf(rate.pct), totals),
-    ok: totals[rate.ok] || 0,
+    ok: scoutValue(fieldOf(rate.ok), totals) || 0,
     total: scoutValue(fieldOf(rate.total), totals) || 0,
     referencePct: reference && scoutValue(fieldOf(rate.pct), reference),
   }));
@@ -470,11 +470,12 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
   // Lançamentos que têm algum número além dos da súmula (jogos com transmissão)
   const technicalCount = filtered.filter((entry) => Object.keys(entry.stats).some((key) => !SHEET_KEYS.has(key))).length;
 
-  // Ranking: soma do número escolhido por atleta, do maior para o menor
+  // Ranking: soma do número escolhido por atleta, do maior para o menor.
+  // Não segue os filtros do topo (pedido do usuário): conta sempre todos os lançamentos
   // untitled: sem o nome dentro do quadro, quando o título da parte já diz "Ranking dos atletas"
   const rankingPanel = (keys: string[], current: string, onPick: (key: string) => void, untitled = false) => {
     const byAthlete = new Map<string, number>();
-    filtered.forEach((entry) => byAthlete.set(entry.athleteId, (byAthlete.get(entry.athleteId) || 0) + (entry.stats[current] || 0)));
+    valid.forEach((entry) => byAthlete.set(entry.athleteId, (byAthlete.get(entry.athleteId) || 0) + (entry.stats[current] || 0)));
     const ranking = [...byAthlete.entries()]
       .filter(([, total]) => total > 0)
       .sort((a, b) => b[1] - a[1])
@@ -562,6 +563,14 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
           <SheetSelect value={position} options={positionOptions} onChange={pickPosition} label="Filtrar por posição" placeholder="Todas as posições" className={filterClass} />
         </div>
       </div>
+
+      {/* Ranking dos atletas: em cima do Scout Geral, sem seguir os filtros; some na tela do scout técnico */}
+      {!showTechnical && (
+        <div className="space-y-4 pb-2 pt-4">
+          <SectionHeader title="Ranking dos atletas" />
+          {rankingPanel(RANKING_KEYS, rankingKey, setRankingKey, true)}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div className={`${panelClass} p-8 text-center`}>
@@ -750,12 +759,6 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
           </div>
 
           {technicalButton}
-
-          {/* 3. Ranking dos atletas, ainda só com números do scout geral */}
-          <div className="space-y-4">
-            <SectionHeader title="Ranking dos atletas" />
-            {rankingPanel(RANKING_KEYS, rankingKey, setRankingKey, true)}
-          </div>
 
           </>
           )}

@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { supabase, hasSupabaseConfig } from './lib/supabase';
 import { Athlete, ContractGoal, Game, ScoutEntry, ScoutEntryInput, TacticalMeeting, View } from './types';
 import { activeLoanClub, contractFileName, contractGoalProgress, formatNumber } from './contract';
-import { BUILTIN_CLUBS, Club, clubKey, clubLogoMap, mergeClubs } from './clubs';
+import { BUILTIN_CLUBS, Club, clubKey, clubLogoMap, findClubLogo, mergeClubs } from './clubs';
 import type { ClubInput } from './views/ClubsView';
 
 // Imports from Components
@@ -266,7 +266,7 @@ export default function App() {
   // Escudo de um clube pelo nome: primeiro o do cadastro de clubes, depois o de algum atleta daquele clube
   const resolveClubLogo = (club?: string | null) => {
     const key = clubKey(club || '');
-    return key ? registryLogos.get(key) || athleteLogos.get(key) : undefined;
+    return key ? registryLogos.get(key) || athleteLogos.get(key) || findClubLogo(registryLogos, club) : undefined;
   };
   // Só para atleta vindo do banco (mapAthleteRow): aplicar de novo trocaria o escudo próprio pelo do cadastro.
   // Em Negociados o clube do atleta é o Clube do Contrato (regra do usuário); o empréstimo em vigor troca o clube só na exibição (activeLoanClub)
@@ -1517,7 +1517,7 @@ export default function App() {
         />
       );
       // Só admin lança scout; os demais caem no painel (default)
-      case 'lancar-scout': if (isAdmin) return <ScoutEntryView entries={scoutEntries} athletes={athletes} games={games} onSave={handleSaveScoutEntries} onDelete={handleDeleteScoutEntry} />;
+      case 'lancar-scout': if (isAdmin) return <ScoutEntryView entries={scoutEntries} athletes={athletes} games={games} onSave={handleSaveScoutEntries} onDelete={handleDeleteScoutEntry} clubLogoOf={resolveClubLogo} clubs={allClubs} />;
       // Só admin cadastra clubes; os demais caem no painel (default)
       case 'clubes': if (isAdmin) return <ClubsView clubs={allClubs} onSave={handleSaveClubs} onDelete={handleDeleteClub} />;
       default: return <DashboardView athletes={athletes} games={games} scoutEntries={scoutEntries} />;

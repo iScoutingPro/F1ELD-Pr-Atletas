@@ -24,6 +24,23 @@ const pct = (ok: string, ...others: string[]) => (stats: Stats) => {
   return total ? Math.round(((stats[ok] || 0) / total) * 100) : undefined;
 };
 
+// Ações bem e mal sucedidas: somas dos números abaixo, nas listas ditadas pelo usuário em 09/10/2026.
+// O que não está em nenhuma das duas (Part. em Gol, Desarme Inc. e as marcações da súmula) fica fora da conta
+const ACTIONS_OK_KEYS = [
+  'goals', 'assists', 'preAssists', 'passesCompleted', 'longPassesCompleted', 'shotsOnTarget', 'crossesCompleted',
+  'tackles', 'interceptions', 'dribblesCompleted', 'foulsSuffered', 'aerialDefWon', 'aerialOffWon',
+];
+const ACTIONS_BAD_KEYS = [
+  'passesMissed', 'longPassesMissed', 'shotsOff', 'shotsBlocked', 'crossesMissed', 'dribbledPast', 'ballLosses',
+  'dribblesMissed', 'foulsCommitted', 'yellowCards', 'redCards', 'aerialDefLost', 'aerialOffLost', 'offsides',
+];
+const actionsOk = sum(...ACTIONS_OK_KEYS);
+const actionsTotal = sum(...ACTIONS_OK_KEYS, ...ACTIONS_BAD_KEYS);
+const actionsPct = (stats: Stats) => {
+  const total = actionsTotal(stats);
+  return total ? Math.round(((actionsOk(stats) || 0) / total) * 100) : undefined;
+};
+
 export interface ScoutField {
   key: string;
   label: string;
@@ -46,10 +63,10 @@ export const SCOUT_FIELDS: ScoutField[] = [
   { key: 'assists', label: 'Assistência' },
   { key: 'preAssists', label: 'Pré Assistência' },
   { key: 'goalParticipations', label: 'Part. em Gol' },
-  { key: 'actionsOk', label: 'Ações Bem Suc.' },
-  { key: 'actionsBad', label: 'Ações Mal Suc.' },
-  { key: 'actionsTotal', label: 'Ações Totais', calc: sum('actionsOk', 'actionsBad') },
-  { key: 'actionsPct', label: '% das Ações', calc: pct('actionsOk', 'actionsBad'), percent: true },
+  { key: 'actionsOk', label: 'Ações Bem Suc.', calc: actionsOk },
+  { key: 'actionsBad', label: 'Ações Mal Suc.', calc: sum(...ACTIONS_BAD_KEYS) },
+  { key: 'actionsTotal', label: 'Ações Totais', calc: actionsTotal },
+  { key: 'actionsPct', label: '% das Ações', calc: actionsPct, percent: true },
   { key: 'passesCompleted', label: 'Passes Certos' },
   { key: 'passesMissed', label: 'Passes Errados' },
   { key: 'passesTotal', label: 'Passes Totais', calc: sum('passesCompleted', 'passesMissed') },

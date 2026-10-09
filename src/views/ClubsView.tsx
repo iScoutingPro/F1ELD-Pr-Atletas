@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderUp, Pencil, Plus, Search, Shield, Trash2, Upload, X } from 'lucide-react';
+import { Pencil, Plus, Search, Shield, Trash2, Upload, X } from 'lucide-react';
 import { Club, clubKey } from '../clubs';
 
 // Clube a gravar: com id é edição; sem arquivo, o escudo atual é mantido
@@ -33,10 +33,6 @@ const primaryButton = 'inline-flex h-11 items-center justify-center gap-2 rounde
 const ghostButton = 'inline-flex h-11 items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-5 text-[10px] font-black uppercase tracking-[0.2em] text-white transition hover:border-primary hover:bg-primary hover:text-background disabled:opacity-50';
 const closeClass = 'absolute right-3 top-3 z-30 flex h-9 w-9 touch-manipulation items-center justify-center rounded-full border border-error/40 bg-error/15 text-error transition hover:bg-error hover:text-white';
 
-// "sao-paulo_fc.png" vira "sao paulo fc": o nome do arquivo é o ponto de partida do nome do clube
-const nameFromFile = (file: File) =>
-  file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ').replace(/\b(logo|escudo|brasao)\b/gi, '').replace(/\s+/g, ' ').trim();
-
 const fileProblem = (file: File) =>
   !LOGO_TYPES.includes(file.type) ? 'não é uma imagem aceita (PNG, JPG, WEBP ou SVG)'
     : file.size > MAX_LOGO_MB * 1024 * 1024 ? `passa de ${MAX_LOGO_MB} MB`
@@ -67,8 +63,9 @@ const Modal = ({ onClose, wide, children }: { onClose: () => void; wide?: boolea
 };
 
 const Crest = ({ logo, className }: { logo?: string; className: string }) => (
-  <div className={`flex shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.06] ${className}`}>
-    {logo ? <img src={logo} alt="" className="h-[70%] w-[70%] object-contain" /> : <Shield className="h-1/3 w-1/3 text-white/30" />}
+  // Placa clara atrás do escudo: escudo escuro (preto, azul-marinho) sumia no fundo do app
+  <div className={`flex shrink-0 items-center justify-center rounded-full bg-[radial-gradient(circle_at_50%_30%,#ffffff_0%,#f4f4f5_45%,#d4d4d8_100%)] shadow-[0_14px_30px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.35),0_0_0_6px_rgba(255,255,255,0.05),inset_0_-6px_12px_rgba(0,0,0,0.12)] ${className}`}>
+    {logo ? <img src={logo} alt="" className="h-[66%] w-[66%] object-contain drop-shadow-[0_2px_3px_rgba(0,0,0,0.25)]" /> : <Shield className="h-1/3 w-1/3 text-zinc-400" />}
   </div>
 );
 
@@ -144,114 +141,14 @@ const ClubForm = ({ club, clubs, onSave, onClose }: { club?: Club; clubs: Club[]
   );
 };
 
-interface BulkRow {
-  key: string;
-  file: File;
-  name: string;
-  preview: string;
-}
-
-// Conferência dos escudos enviados de uma vez: cada arquivo vira um clube, com o nome tirado do nome do arquivo
-const BulkForm = ({ files, clubs, onSave, onClose }: { files: File[]; clubs: Club[]; onSave: (clubs: ClubInput[]) => Promise<boolean>; onClose: () => void }) => {
-  const skipped = useMemo(() => files.filter((file) => fileProblem(file)), [files]);
-  const [rows, setRows] = useState<BulkRow[]>(() =>
-    files.filter((file) => !fileProblem(file)).map((file, index) => ({ key: `${index}-${file.name}`, file, name: nameFromFile(file), preview: URL.createObjectURL(file) })));
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const previews = useRef(rows.map((row) => row.preview));
-  useEffect(() => () => previews.current.forEach((url) => URL.revokeObjectURL(url)), []);
-
-  const existing = useMemo(() => new Map(clubs.map((club) => [clubKey(club.name), club])), [clubs]);
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (rows.length === 0) return setError('Nenhum escudo para enviar.');
-    if (rows.some((row) => !row.name.trim())) return setError('Escreva o nome de todos os clubes.');
-    const keys = rows.map((row) => clubKey(row.name));
-    if (new Set(keys).size !== keys.length) return setError('Há dois escudos com o mesmo nome de clube. Corrija ou remova um deles.');
-    setSaving(true);
-    // Nome que já existe: o escudo novo substitui o do clube
-    const saved = await onSave(rows.map((row) => ({ id: existing.get(clubKey(row.name))?.id, name: row.name.trim(), file: row.file })));
-    setSaving(false);
-    if (saved) onClose();
-  };
-
-  return (
-    <Modal onClose={onClose} wide>
-      <form onSubmit={submit} className="space-y-5">
-        <div>
-          <p className={labelClass}>Enviar escudos</p>
-          <h2 className="mt-2 text-2xl font-black uppercase italic leading-none text-white">Confira os nomes</h2>
-          <p className="mt-3 text-sm text-white/70">O nome de cada clube veio do nome do arquivo. Corrija o que estiver errado antes de salvar.</p>
-        </div>
-        {skipped.length > 0 && (
-          <p className="rounded-2xl border border-error/30 bg-error/10 px-4 py-3 text-xs font-bold text-error">
-            {skipped.length === 1 ? '1 arquivo ficou de fora' : `${skipped.length} arquivos ficaram de fora`} por não ser imagem aceita ou passar de {MAX_LOGO_MB} MB: {skipped.map((file) => file.name).join(', ')}
-          </p>
-        )}
-        <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-          {rows.map((row) => {
-            const match = existing.get(clubKey(row.name));
-            return (
-              <div key={row.key} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-2.5">
-                <Crest logo={row.preview} className="h-14 w-14" />
-                <div className="min-w-0 flex-1">
-                  <input
-                    type="text"
-                    value={row.name}
-                    onChange={(event) => setRows((prev) => prev.map((item) => (item.key === row.key ? { ...item, name: event.target.value } : item)))}
-                    className={inputClass}
-                    placeholder="Nome do clube"
-                    aria-label={`Nome do clube do arquivo ${row.file.name}`}
-                  />
-                  <p className="mt-1 truncate pl-1 text-[11px] font-medium text-on-surface-variant">
-                    {row.file.name}{match ? ' · já existe: o escudo será substituído' : ''}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setRows((prev) => prev.filter((item) => item.key !== row.key))}
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 text-on-surface-variant transition hover:border-error/50 hover:text-error"
-                  aria-label={`Tirar ${row.file.name} da lista`}
-                  title="Tirar da lista"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            );
-          })}
-          {rows.length === 0 && <p className="py-8 text-center text-sm text-white/60">Nenhum escudo na lista.</p>}
-        </div>
-        {error && <p className="text-xs font-bold text-error">{error}</p>}
-        <div className="flex gap-3">
-          <button type="submit" disabled={saving || rows.length === 0} className={`${primaryButton} flex-1`}>
-            {saving ? 'Enviando...' : rows.length === 1 ? 'Salvar 1 clube' : `Salvar ${rows.length} clubes`}
-          </button>
-          <button type="button" onClick={onClose} className={ghostButton}>Cancelar</button>
-        </div>
-      </form>
-    </Modal>
-  );
-};
-
 export const ClubsView = ({ clubs, onSave, onDelete }: ClubsViewProps) => {
   const [query, setQuery] = useState('');
   // undefined = formulário fechado; null = clube novo; senão o clube em edição
   const [editing, setEditing] = useState<Club | null | undefined>(undefined);
-  const [bulkFiles, setBulkFiles] = useState<File[] | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
-  const filesRef = useRef<HTMLInputElement>(null);
-  const folderRef = useRef<HTMLInputElement>(null);
 
   const term = clubKey(query);
   const visible = term ? clubs.filter((club) => clubKey(club.name).includes(term)) : clubs;
-  const customCount = clubs.filter((club) => !club.builtin).length;
-
-  const pickFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
-    event.target.value = '';
-    if (files.length > 0) setBulkFiles(files);
-  };
 
   const remove = async (club: Club) => {
     const key = club.id || clubKey(club.name);
@@ -268,23 +165,11 @@ export const ClubsView = ({ clubs, onSave, onDelete }: ClubsViewProps) => {
             <Shield className="h-5 w-5 text-white" />
           </div>
           <div className="min-w-0 flex-1 basis-48">
-            <p className={labelClass}>Nome e escudo</p>
-            <h1 className="mt-1 text-3xl font-black uppercase italic leading-none tracking-tight text-white sm:text-4xl">Clubes</h1>
+            <h1 className="text-3xl font-black uppercase italic leading-none tracking-tight text-white sm:text-4xl">Clubes</h1>
             <p className="mt-2 text-xs font-bold text-on-surface-variant">
-              <span className="text-white">{clubs.length}</span> clubes · <span className="text-white">{customCount}</span> {customCount === 1 ? 'cadastrado por você' : 'cadastrados por você'}
+              <span className="text-white">{clubs.length}</span> {clubs.length === 1 ? 'clube' : 'clubes'}
             </p>
           </div>
-          <input type="file" ref={filesRef} className="hidden" accept={LOGO_ACCEPT} multiple onChange={pickFiles} />
-          {/* Escolher a pasta inteira: o atributo não existe nos tipos do React */}
-          <input type="file" ref={folderRef} className="hidden" multiple onChange={pickFiles} {...({ webkitdirectory: '' } as object)} />
-          <button type="button" onClick={() => folderRef.current?.click()} className={`${ghostButton} max-sm:hidden`}>
-            <FolderUp className="h-3.5 w-3.5" />
-            Enviar pasta
-          </button>
-          <button type="button" onClick={() => filesRef.current?.click()} className={ghostButton}>
-            <Upload className="h-3.5 w-3.5" />
-            Enviar escudos
-          </button>
           <button type="button" onClick={() => setEditing(null)} className={primaryButton}>
             <Plus className="h-3.5 w-3.5" />
             Adicionar clube
@@ -309,13 +194,13 @@ export const ClubsView = ({ clubs, onSave, onDelete }: ClubsViewProps) => {
           <p className="mt-2 text-sm text-white/70">Nenhum clube com esse nome. Use "Adicionar clube" para cadastrar.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 min-[1800px]:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-5 min-[1800px]:grid-cols-6">
           {visible.map((club) => (
-            <div key={club.id || clubKey(club.name)} className={`${panelClass} group relative flex flex-col items-center gap-3 p-4 text-center`}>
-              <span className={`absolute left-3 top-3 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-[0.18em] ${club.builtin ? 'border-white/10 text-on-surface-variant' : 'border-white/30 bg-white/10 text-white'}`}>
-                {club.builtin ? 'Padrão' : 'Cadastrado'}
-              </span>
-              <div className="absolute right-2 top-2 flex gap-1">
+            <div key={club.id || clubKey(club.name)} className={`${panelClass} group relative flex flex-col items-center overflow-hidden px-4 pb-4 pt-5 text-center transition duration-300 hover:-translate-y-0.5 hover:border-white/25 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_18px_40px_rgba(0,0,0,0.5)]`}>
+              <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <div className="pointer-events-none absolute left-1/2 top-4 h-32 w-32 -translate-x-1/2 rounded-full bg-white/[0.07] blur-2xl transition group-hover:bg-white/[0.12]" />
+              {/* No computador o lápis e a lixeira aparecem ao passar o mouse; no toque ficam sempre à mostra */}
+              <div className={`absolute right-2 top-2 z-10 flex gap-1 transition lg:focus-within:opacity-100 lg:group-hover:opacity-100 ${confirmingDelete === (club.id || clubKey(club.name)) ? '' : 'lg:opacity-0'}`}>
                 <button
                   type="button"
                   onClick={() => setEditing(club)}
@@ -337,15 +222,15 @@ export const ClubsView = ({ clubs, onSave, onDelete }: ClubsViewProps) => {
                   </button>
                 )}
               </div>
-              <Crest logo={club.logo} className="mt-7 h-20 w-20 sm:h-24 sm:w-24" />
-              <p className="w-full break-words text-sm font-black uppercase italic leading-tight text-white">{club.name}</p>
+              <Crest logo={club.logo} className="relative mt-6 h-24 w-24 sm:h-28 sm:w-28" />
+              <div className="mt-5 h-px w-10 bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+              <p className="mt-3 w-full break-words text-sm font-black uppercase italic leading-tight tracking-tight text-white">{club.name}</p>
             </div>
           ))}
         </div>
       )}
 
       {editing !== undefined && <ClubForm club={editing || undefined} clubs={clubs} onSave={onSave} onClose={() => setEditing(undefined)} />}
-      {bulkFiles && <BulkForm files={bulkFiles} clubs={clubs} onSave={onSave} onClose={() => setBulkFiles(null)} />}
     </div>
   );
 };

@@ -4,6 +4,7 @@ import { Check, ClipboardList, Minus, Pencil, Plus, Save, Search, Trash2, X } fr
 import { Athlete, Game, ScoutEntry, ScoutEntryInput } from '../types';
 import { SCOUT_FIELDS, SCOUT_INFO_FIELDS, ScoutField, scoutValue, sortScoutEntries } from '../scout';
 import { SheetSelect, normalize } from '../components/SheetSelect';
+import { Club } from '../clubs';
 import { ScoutOverview } from '../components/ScoutOverview';
 
 const panelClass = 'rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]';
@@ -39,35 +40,99 @@ const STAT_GROUPS = new Map([
   ['offsides', 'Outros'],
 ]);
 
-// Faixa de grupos do cabeçalho: nome e quantas colunas cada grupo ocupa
-const HEADER_GROUPS = SCOUT_FIELDS.reduce<{ label: string; span: number }[]>((groups, field) => {
-  const label = STAT_GROUPS.get(field.key);
-  if (label || groups.length === 0) groups.push({ label: label || '', span: 1 });
-  else groups[groups.length - 1].span += 1;
-  return groups;
-}, []);
+type LogoOf = (club?: string) => string | undefined;
 
-// Cor do texto de cada dado da partida na tabela de lançamentos
-const INFO_TONES: Record<string, string> = {
-  year: 'font-bold text-on-surface-variant',
-  team: 'font-bold text-white/85',
-  matchDate: 'text-white/70',
-  competition: 'text-white/70',
-  round: 'text-white/70',
-  match: 'font-bold text-white',
+const chipClass = 'inline-flex h-6 items-center rounded-md border border-white/10 bg-white/[0.06] px-2 text-[11px] font-black leading-none text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]';
+
+// Escudo pequeno do time na tabela de lançamentos; sem escudo cadastrado, a inicial do nome
+const MiniCrest = ({ name, logo }: { name: string; logo?: string }) => (
+  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-white/15 bg-gradient-to-b from-white/[0.14] to-white/[0.02] shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+    {logo
+      ? <img src={logo} alt="" className="h-[18px] w-[18px] object-contain" />
+      : <span className="text-[10px] font-black italic leading-none text-white/80">{name.trim().charAt(0).toUpperCase()}</span>}
+  </span>
+);
+
+// "Mandante 2 x 1 Visitante" ou "Mandante x Visitante": separa os times e o placar; outro formato fica como texto
+const parseMatch = (text: string) => {
+  const scored = text.match(/^(.+?)\s+(\d+)\s*[x×]\s*(\d+)\s+(.+)$/i);
+  if (scored) return { home: scored[1], away: scored[4], score: [scored[2], scored[3]] };
+  const plain = text.match(/^(.+?)\s+[x×]\s+(.+)$/i);
+  return plain ? { home: plain[1], away: plain[2], score: null } : null;
 };
 
-// Número do scout na tabela de lançamentos: marcação vira ponto, percentual ganha barra e o zero fica apagado
+// Dado da partida na tabela de lançamentos: ano e rodada em etiqueta, equipe com escudo, data separada do horário e partida com o placar em destaque
+const infoCell = (key: string, value: string, logoOf?: LogoOf) => {
+  if (!value) return <span className="text-white/20">–</span>;
+  if (key === 'year' || key === 'round') return <span className={chipClass}>{value}</span>;
+  if (key === 'team') {
+    return (
+      <span className="flex items-center justify-center gap-2.5 font-bold text-white">
+        <MiniCrest name={value} logo={logoOf?.(value)} />
+        {value}
+      </span>
+    );
+  }
+  if (key === 'matchDate') {
+    const [day, time] = value.split(/\s+às\s+/i);
+    if (!time) return <span className="font-bold text-white">{value}</span>;
+    return (
+      <span className="flex flex-col items-center gap-1 leading-none">
+        <span className="text-[13px] font-black text-white">{day}</span>
+        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-on-surface-variant">{time}</span>
+      </span>
+    );
+  }
+  if (key === 'match') {
+    const game = parseMatch(value);
+    if (!game) return <span className="font-bold text-white">{value}</span>;
+    return (
+      <span className="flex items-center justify-center gap-2.5 font-bold text-white">
+        <MiniCrest name={game.home} logo={logoOf?.(game.home)} />
+        {game.home}
+        {game.score ? (
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[13px] font-black leading-none text-background shadow-[0_6px_16px_rgba(0,0,0,0.45)]">
+            {game.score[0]}
+            <span className="text-[9px] opacity-50">×</span>
+            {game.score[1]}
+          </span>
+        ) : (
+          <span className="text-[9px] font-black uppercase tracking-[0.14em] text-on-surface-variant">vs</span>
+        )}
+        {game.away}
+        <MiniCrest name={game.away} logo={logoOf?.(game.away)} />
+      </span>
+    );
+  }
+  return <span className="font-semibold text-white/80">{value}</span>;
+};
+
+// Número do scout na tabela de lançamentos: marcação vira um selo, percentual ganha barra e o zero fica apagado
 const statCell = (field: ScoutField, stats: Record<string, number>) => {
   const value = scoutValue(field, stats);
-  if (field.flag) return <span className={`mx-auto block h-2 w-2 rounded-full ${value ? 'bg-primary' : 'bg-white/10'}`} title={value ? field.label : undefined} />;
+  if (field.flag) {
+    // Titular em verde com o sinal de certo e Reserva em vermelho com um "x" (pedido do usuário); Entrou e Saiu seguem em branco
+    const tone = field.key === 'starter'
+      ? 'bg-emerald-500 text-white shadow-[0_0_12px_rgba(16,185,129,0.45)]'
+      : field.key === 'bench'
+        ? 'bg-error text-white shadow-[0_0_12px_rgba(239,68,68,0.45)]'
+        : 'bg-primary text-background shadow-[0_0_12px_rgba(255,255,255,0.25)]';
+    const Mark = field.key === 'bench' ? X : Check;
+    return value ? (
+      <span className={`mx-auto flex h-5 w-5 items-center justify-center rounded-full ${tone}`} title={field.label}>
+        <Mark className="h-3 w-3" strokeWidth={4} />
+      </span>
+    ) : (
+      <span className="mx-auto block h-1.5 w-1.5 rounded-full bg-white/10" />
+    );
+  }
   if (value === undefined) return <span className="text-white/20">–</span>;
   if (field.percent) {
     return (
       <span className="inline-flex flex-col items-center gap-1.5">
         <span className="leading-none">{value}%</span>
         <span className="block h-[3px] w-9 overflow-hidden rounded-full bg-white/10">
-          <span className="block h-full rounded-full bg-primary" style={{ width: `${value}%` }} />
+          <span className="block h-full rounded-full bg-gradient-to-r from-zinc-400 to-white" style={{ width: `${value}%` }} />
         </span>
       </span>
     );
@@ -76,7 +141,7 @@ const statCell = (field: ScoutField, stats: Record<string, number>) => {
 };
 
 const INFO_WIDTHS: Record<string, string> = {
-  year: 'min-w-[6.5rem]',
+  year: 'min-w-[5rem]',
   team: 'min-w-[11rem]',
   matchDate: 'min-w-[9rem]',
   competition: 'min-w-[12rem]',
@@ -97,6 +162,9 @@ const COLUMNS: Column[] = [
 // A planilha de lançamento não tem os totais e percentuais: eles são calculados e aparecem só na tabela e no perfil
 const SHEET_COLUMNS = COLUMNS.filter((column) => column.kind !== 'calc');
 
+// A tabela de lançamentos não mostra a equipe do atleta nem a data/horário da partida (pedido do usuário); na planilha elas continuam
+const TABLE_HIDDEN_KEYS = ['team', 'matchDate'];
+const TABLE_COLUMNS = COLUMNS.filter((column) => !TABLE_HIDDEN_KEYS.includes(column.key));
 const BLANK_ROWS = 8;
 // Linhas em branco depois das que vêm do Calendário
 const EXTRA_BLANK_ROWS = 2;
@@ -128,6 +196,10 @@ interface ScoutEntryViewProps {
   games: Game[];
   onSave: (rows: ScoutEntryInput[], editingId?: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
+  // Escudo pelo nome do clube (cadastro de clubes), para a equipe e os times da partida na tabela de lançamentos
+  clubLogoOf?: LogoOf;
+  // Clubes do app (os que já vêm e os da aba Clubes): opções da Equipe do Atleta na planilha
+  clubs?: Club[];
 }
 
 const onlyDigits = (value: string) => value.replace(/\D/g, '').slice(0, 3);
@@ -173,10 +245,12 @@ interface ChoiceCellProps {
   onChange: (value: string) => void;
   label: string;
   className: string;
+  // Miniatura de cada opção (o escudo, na Equipe do Atleta)
+  imageOf?: LogoOf;
 }
 
 // Célula de lista suspensa da planilha (Ano, Equipe do Atleta e Competição)
-const ChoiceCell = ({ value, options, allowOther, onChange, label, className }: ChoiceCellProps) => {
+const ChoiceCell = ({ value, options, allowOther, onChange, label, className, imageOf }: ChoiceCellProps) => {
   const [typing, setTyping] = useState(false);
 
   if (typing) {
@@ -201,7 +275,7 @@ const ChoiceCell = ({ value, options, allowOther, onChange, label, className }: 
   return (
     <SheetSelect
       value={value}
-      options={list.map((option) => ({ value: option, label: option }))}
+      options={list.map((option) => ({ value: option, label: option, ...(imageOf ? { image: imageOf(option) } : {}) }))}
       onChange={onChange}
       onOther={allowOther ? () => { onChange(''); setTyping(true); } : undefined}
       label={label}
@@ -218,7 +292,7 @@ const isEmptyRow = (row: Row) => SHEET_COLUMNS.every(({ key }) => (row[key] || '
 // Lançamento do scout (só admin): o botão abre uma planilha, uma linha por atleta em cada partida,
 // e a tela lista embaixo tudo o que já foi lançado. A planilha já abre com os jogos do Calendário que aguardam scout.
 // O lançamento é só no computador: no celular (abaixo de sm) o botão, as caixas de seleção e os botões de editar e excluir somem e fica só a tabela
-export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: ScoutEntryViewProps) => {
+export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete, clubLogoOf, clubs = [] }: ScoutEntryViewProps) => {
   const [rows, setRows] = useState<Row[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   // Com a tela do scout técnico aberta, a tabela de lançamentos some (pedido do usuário)
@@ -251,7 +325,8 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     return {
       year: { options: [...new Set<string>([...years, ...entries.map((entry) => entry.year).filter(Boolean)])].sort((a, b) => b.localeCompare(a)) },
       team: {
-        options: uniqueSorted([...athletes.map((athlete) => athlete.club).filter((club) => club !== NO_CLUB), ...entries.map((entry) => entry.team), ...rows.map((row) => row.team)]),
+        // Os clubes da aba Clubes, mais os dos atletas e as equipes já lançadas ou digitadas que não estão lá
+        options: uniqueSorted([...clubs.map((club) => club.name), ...athletes.map((athlete) => athlete.club).filter((club) => club !== NO_CLUB), ...entries.map((entry) => entry.team), ...rows.map((row) => row.team)]),
         allowOther: true,
       },
       competition: {
@@ -259,7 +334,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
         allowOther: true,
       },
     };
-  }, [athletes, entries, games, rows]);
+  }, [athletes, clubs, entries, games, rows]);
 
   // Jogos do Calendário que ainda não têm scout, os já realizados e os dos próximos FUTURE_DAYS dias: uma linha por atleta vinculado,
   // do jogo mais perto de hoje para o mais distante, já com ano, equipe, data, competição e partida. Jogo sem atleta vinculado entra com uma linha para escolher o atleta.
@@ -428,11 +503,10 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
     setSelected([]);
   };
 
-  // O cabeçalho tem duas faixas (grupos e nomes das colunas) e fica parado no topo ao rolar a tabela para baixo;
-  // a faixa de grupos tem altura fixa (h-8) porque a de nomes começa logo abaixo dela (top-8)
-  const groupHeadClass = 'sticky top-0 h-8 whitespace-nowrap border-b border-white/[0.06] bg-surface-low px-3 text-left text-[9px] font-black uppercase tracking-[0.2em] text-white';
-  const headClass = 'sticky top-8 whitespace-nowrap border-b border-white/10 bg-surface-low px-3 py-2.5 text-[9px] font-black uppercase tracking-[0.14em]';
-  const cellClass = 'whitespace-nowrap border-b border-white/[0.06] px-3 py-3 text-xs tabular-nums';
+  // O cabeçalho fica parado no topo ao rolar a tabela para baixo e é mais escuro que as linhas (fundo sólido, por causa das colunas paradas).
+  // A faixa com os nomes dos grupos, que ficava acima, saiu a pedido do usuário; os fios entre os grupos continuam
+  const headClass = 'sticky top-0 whitespace-nowrap border-b border-white/15 bg-background px-3 py-3 text-[10px] font-black uppercase tracking-[0.14em]';
+  const cellClass = 'whitespace-nowrap border-b border-white/[0.06] px-3 py-3.5 text-xs tabular-nums';
   const groupLineClass = 'border-l border-white/[0.08]';
   // A caixa de seleção e o nome do atleta ficam parados à esquerda ao rolar a tabela para o lado
   const stickyClass = 'sticky left-0 border-r border-white/[0.08] sm:left-10';
@@ -440,7 +514,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
   // As colunas paradas precisam de fundo sólido, igual ao da linha, para os números não aparecerem por baixo ao rolar
   const stickyBg = (isSelected: boolean) => (isSelected ? 'bg-surface-high' : 'bg-surface-low group-hover:bg-surface');
   const checkBoxClass = (on: boolean) => `mx-auto flex h-[18px] w-[18px] items-center justify-center rounded-md border transition ${on ? 'border-primary bg-primary text-background' : 'border-white/25 text-transparent hover:border-white/60'}`;
-  const toolButtonClass = 'flex h-9 items-center justify-center gap-1.5 rounded-full border px-4 text-[9px] font-black uppercase tracking-[0.14em] transition disabled:cursor-not-allowed disabled:opacity-35';
+  const toolButtonClass = 'flex h-10 items-center justify-center gap-1.5 rounded-full border px-4 text-[9px] font-black uppercase tracking-[0.14em] transition disabled:cursor-not-allowed disabled:opacity-35';
   const neutralToolClass = 'border-white/10 text-on-surface-variant enabled:hover:bg-white/10 enabled:hover:text-white';
 
   return (
@@ -469,8 +543,9 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
 
       <ScoutOverview entries={entries} athletes={athletes} onTechnicalChange={setTechnicalOpen} />
 
-      <section hidden={technicalOpen && entries.length > 0} className="rounded-3xl border border-white/10 bg-surface-low p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <div className="flex flex-wrap items-center gap-3 px-1">
+      <section hidden={technicalOpen && entries.length > 0} className="relative overflow-hidden rounded-3xl border border-white/10 bg-surface-low p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_24px_60px_rgba(0,0,0,0.35)] sm:p-5">
+        <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white/40 to-transparent" />
+        <div className="flex flex-wrap items-center gap-3">
           {sorted.length > 0 && (
             <>
               <label className="relative block w-full sm:w-72">
@@ -480,7 +555,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Pesquisar atleta, equipe ou partida"
-                  className="w-full rounded-full border border-white/10 bg-surface-high py-2 pl-9 pr-4 text-xs font-bold text-white outline-none transition placeholder:text-on-surface-variant focus:border-primary"
+                  className="h-10 w-full rounded-full border border-white/10 bg-surface-high pl-9 pr-4 text-xs font-bold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] outline-none transition placeholder:text-on-surface-variant focus:border-white/60 focus:ring-2 focus:ring-white/15"
                 />
               </label>
               <div className="flex items-center gap-2 max-sm:hidden">
@@ -518,28 +593,19 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-auto rounded-2xl border border-white/[0.08] sm:max-h-[72vh]">
+          <div className="mt-4 overflow-auto rounded-2xl border border-white/10 shadow-[0_12px_32px_rgba(0,0,0,0.35)] sm:max-h-[72vh]">
             <table className="w-full border-separate border-spacing-0 text-center">
               <thead>
-                <tr>
-                  <th className={`${groupHeadClass} ${checkColumnClass} z-30`} />
-                  <th className={`${groupHeadClass} z-20`} />
-                  <th className={`${groupHeadClass} ${stickyClass} z-30`} />
-                  <th colSpan={SCOUT_INFO_FIELDS.length - 1} className={`${groupHeadClass} z-20`}>Partida</th>
-                  {HEADER_GROUPS.map((group, index) => (
-                    <th key={index} colSpan={group.span} className={`${groupHeadClass} ${groupLineClass} z-20`}>{group.label}</th>
-                  ))}
-                </tr>
                 <tr>
                   <th className={`${headClass} ${checkColumnClass} z-30`}>
                     <button type="button" onClick={toggleAll} className={checkBoxClass(allSelected)} aria-label={allSelected ? 'Limpar seleção' : 'Selecionar todos'}>
                       <Check className="h-3 w-3" strokeWidth={4} />
                     </button>
                   </th>
-                  {COLUMNS.map((column) => (
+                  {TABLE_COLUMNS.map((column) => (
                     <th
                       key={column.key}
-                      className={`${headClass} ${isTextColumn(column) ? 'text-left' : ''} ${column.kind === 'calc' ? 'text-white' : 'text-on-surface-variant'} ${column.kind === 'athlete' ? `${stickyClass} z-30` : 'z-20'} ${column.groupStart ? groupLineClass : ''}`}
+                      className={`${headClass} ${column.kind === 'athlete' ? 'text-left' : ''} ${column.kind === 'calc' ? 'text-white' : 'text-on-surface-variant'} ${column.kind === 'athlete' ? `${stickyClass} z-30` : 'z-20'} ${column.groupStart ? groupLineClass : ''}`}
                     >
                       {column.label}
                     </th>
@@ -557,17 +623,17 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                           <Check className="h-3 w-3" strokeWidth={4} />
                         </button>
                       </td>
-                      {COLUMNS.map(({ key, kind, field, groupStart }) => {
+                      {TABLE_COLUMNS.map(({ key, kind, field, groupStart }) => {
                         if (kind === 'athlete') {
                           const name = athlete ? fullName(athlete) : 'Atleta apagado';
                           return (
                             <td key={key} className={`${cellClass} ${stickyClass} z-10 transition-colors ${stickyBg(isSelected)}`}>
                               <div className="flex items-center gap-3 text-left">
                                 {athlete
-                                  ? <img src={athlete.image} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/15 max-sm:hidden" referrerPolicy="no-referrer" />
-                                  : <span className="h-9 w-9 shrink-0 rounded-full bg-white/5 ring-1 ring-white/10 max-sm:hidden" />}
+                                  ? <img src={athlete.image} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover shadow-[0_6px_16px_rgba(0,0,0,0.5)] ring-2 ring-white/20 max-sm:hidden" referrerPolicy="no-referrer" />
+                                  : <span className="h-10 w-10 shrink-0 rounded-full bg-white/5 ring-2 ring-white/10 max-sm:hidden" />}
                                 <div className="min-w-0">
-                                  <p className={`max-w-[8.5rem] truncate text-xs font-black uppercase italic sm:max-w-[16rem] ${athlete ? 'text-white' : 'text-on-surface-variant'}`} title={name}>{name}</p>
+                                  <p className={`max-w-[8.5rem] truncate text-xs font-black uppercase italic sm:max-w-[16rem] sm:text-[13px] ${athlete ? 'text-white' : 'text-on-surface-variant'}`} title={name}>{name}</p>
                                   {athlete && (
                                     <p className="mt-1 truncate text-[9px] font-bold uppercase tracking-[0.14em] text-on-surface-variant max-sm:hidden">
                                       {[athlete.position, athlete.category].filter(Boolean).join(' · ')}
@@ -586,8 +652,8 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                           );
                         }
                         return (
-                          <td key={key} className={`${cellClass} text-left ${INFO_TONES[key] || 'text-white/70'}`}>
-                            {entry[key as keyof ScoutEntry] as string}
+                          <td key={key} className={cellClass}>
+                            {infoCell(key, ((entry[key as keyof ScoutEntry] as string) || '').trim(), clubLogoOf)}
                           </td>
                         );
                       })}
@@ -670,6 +736,7 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
                                 value={row[column.key] || ''}
                                 options={column.key === 'competition' ? categoryFirst(choices.competition.options, athleteById.get(row.athlete)?.category) : choices[column.key].options}
                                 allowOther={choices[column.key].allowOther}
+                                imageOf={column.key === 'team' ? clubLogoOf : undefined}
                                 onChange={(value) => setCell(rowIndex, column, value)}
                                 label={`${column.label}, linha ${rowIndex + 1}`}
                                 className={`${inputClass} ${column.width}`}
