@@ -79,16 +79,34 @@ export interface TacticalMaterial {
   url: string;
 }
 
-// Reunião da consultoria tática do atleta (ícone Acompanhamento Tático do perfil); agendada ou realizada conforme a data
+export type TacticalStatus = 'Agendada' | 'Concluída' | 'Pendente';
+
+// Reunião da consultoria tática do atleta (ícone Acompanhamento Tático do perfil).
+// Reunião antiga, sem status gravado, conta como agendada ou concluída conforme a data
 export interface TacticalMeeting {
   id: string;
   // AAAA-MM-DD
   date: string;
   // HH:MM
   time?: string;
+  // Conteúdo da reunião; deixado em branco no formulário, recebe os tipos escolhidos
   title: string;
+  // Observações
   notes?: string;
   materials: TacticalMaterial[];
+  // Partida a que a reunião se refere; matchDate em AAAA-MM-DD e matchTime em HH:MM
+  matchDate?: string;
+  matchTime?: string;
+  round?: string;
+  match?: string;
+  competition?: string;
+  // Pré Jogo, Pós Jogo, Conteúdo Extra, Modelo de jogo (um ou mais)
+  types?: string[];
+  link?: string;
+  status?: TacticalStatus;
+  // Duração da reunião, em minutos
+  duration?: number;
+  analysts?: string[];
 }
 
 export interface Game {

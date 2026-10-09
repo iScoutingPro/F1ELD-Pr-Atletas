@@ -1,7 +1,7 @@
 import React from 'react';
-import { ArrowUpRight, BriefcaseBusiness, Calendar, Clock, FileText, Flag, LucideIcon, MapPin, MessageCircle, Shield, Target, Trophy, User, Video } from 'lucide-react';
-import { Athlete } from '../types';
-import { activeLoanClub, contractTimeLeft } from '../contract';
+import { ArrowUpRight, BriefcaseBusiness, Calendar, Clock, FileText, Flag, LucideIcon, MapPin, MessageCircle, Shield, Target, TrendingUp, Trophy, User, Video } from 'lucide-react';
+import { Athlete, ScoutEntry } from '../types';
+import { activeLoanClub, contractGoalProgress, contractTimeLeft, formatNumber } from '../contract';
 import { findCountry } from '../countries';
 import { CountryFlag } from './CountrySelect';
 
@@ -76,7 +76,8 @@ const ContactCard = ({ label, phone }: { label: string; phone?: string }) => pho
 
 // onOpenContract e onOpenLoanContract: abrem dentro do app o arquivo do contrato e o do contrato de empréstimo, enviados pelo formulário
 // clubLogoOf: escudo de um clube pelo nome (o do próprio atleta ou o de outro atleta cadastrado no mesmo clube)
-export const AthleteInfo =({ athlete, onOpenContract, onOpenLoanContract, clubLogoOf }: { athlete: Athlete; onOpenContract?: () => void; onOpenLoanContract?: () => void; clubLogoOf?: (club?: string) => string | undefined }) => {
+// entries: lançamentos de scout do atleta, para o progresso das metas do contrato
+export const AthleteInfo =({ athlete, entries = [], onOpenContract, onOpenLoanContract, clubLogoOf }: { athlete: Athlete; entries?: ScoutEntry[]; onOpenContract?: () => void; onOpenLoanContract?: () => void; clubLogoOf?: (club?: string) => string | undefined }) => {
   // Em Negociados, empresário com empresa ou nome aparece no cartão do empresário (com o WhatsApp);
   // só com o WhatsApp, aparece como terceiro contato
   const isNegociado = athlete.listType === 'negociados';
@@ -117,6 +118,10 @@ export const AthleteInfo =({ athlete, onOpenContract, onOpenLoanContract, clubLo
     : 'Field';
   const contractLogo = clubContract ? clubLogoOf?.(contractParty) : undefined;
   const loanLogo = clubLogoOf?.(athlete.loanClub);
+
+  const goals = contractGoalProgress(athlete, entries);
+  const goalsDone = goals.filter((item) => item.status === 'done').length;
+  const goalsPercent = goals.length ? Math.round(goals.reduce((total, item) => total + item.percent, 0) / goals.length) : 0;
 
   return (
     <div className="mt-8 space-y-8">
@@ -368,6 +373,71 @@ export const AthleteInfo =({ athlete, onOpenContract, onOpenLoanContract, clubLo
             <div className="min-w-0">
               <p className="text-sm font-bold text-on-surface-variant">O atleta não possui DVD.</p>
               <p className="mt-1 text-[10px] font-black uppercase italic tracking-widest text-error">Confeccionar o material do atleta.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Metas do contrato: só leitura; cadastrar e editar ficam no ícone Contrato */}
+        {goals.length > 0 && (
+          <div className={`${panelClass} relative overflow-hidden p-4 sm:p-6`}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent" />
+            <div className="pointer-events-none absolute -right-16 -top-20 h-48 w-48 rounded-full bg-white/[0.06] blur-3xl" />
+            <div className="relative flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-surface-high">
+                  <Target className="h-4 w-4 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className={labelClass}>Metas do contrato</p>
+                  <p className="mt-1 text-sm font-bold text-on-surface">
+                    {goalsDone} de {goals.length} {goalsDone === 1 ? 'batida' : 'batidas'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className={labelClass}>Progresso geral</p>
+                <p className="mt-1 text-2xl font-black italic leading-none tracking-tight text-white">{goalsPercent}%</p>
+              </div>
+            </div>
+            <div className="relative mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div className="h-full rounded-full bg-gradient-to-r from-white/50 to-white" style={{ width: `${goalsPercent}%` }} />
+            </div>
+
+            <div className="relative mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {goals.map(({ goal, value, percent, remaining, status, isPercent }) => {
+                const done = status === 'done';
+                const near = status === 'near';
+                const GoalIcon = done ? Trophy : near ? TrendingUp : Target;
+                return (
+                  <div
+                    key={goal.id}
+                    className={`rounded-2xl border p-4 ${done ? 'border-primary/60 bg-white/[0.08] shadow-[0_8px_28px_rgba(255,255,255,0.07)]' : `${near ? 'border-white/30' : 'border-white/10'} bg-white/[0.03]`}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${done ? 'border-primary bg-primary text-background' : 'border-white/10 bg-white/[0.04] text-white'}`}>
+                        <GoalIcon className="h-4 w-4" />
+                      </div>
+                      <p className="min-w-0 flex-1 break-words text-sm font-black uppercase italic leading-tight text-white">{goal.title}</p>
+                      <p className="shrink-0 text-lg font-black leading-none text-white">{percent}%</p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className={`h-full rounded-full ${done ? 'bg-primary shadow-[0_0_16px_rgba(255,255,255,0.7)]' : 'bg-gradient-to-r from-white/40 to-white'}`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-end justify-between gap-2">
+                      <p className="text-xl font-black leading-none text-white">
+                        {formatNumber(value, isPercent)}
+                        <span className="ml-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-on-surface-variant">de {formatNumber(goal.target, isPercent)}</span>
+                      </p>
+                      <p className={`text-[9px] font-black uppercase tracking-[0.18em] ${done || near ? 'text-white' : 'text-on-surface-variant'}`}>
+                        {done ? 'Meta batida' : near ? `Falta pouco: ${formatNumber(remaining, isPercent)}` : `Faltam ${formatNumber(remaining, isPercent)}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

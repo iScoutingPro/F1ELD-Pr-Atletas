@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Armchair, ArrowLeft, ArrowRight, CalendarDays, LogIn, LogOut, LucideIcon, RectangleVertical, Shirt, Target, Timer, TrendingDown, TrendingUp } from 'lucide-react';
+import { Activity, Armchair, ArrowLeft, ArrowRight, CalendarDays, Shield, Swords, LogIn, LogOut, LucideIcon, RectangleVertical, Shirt, Target, Timer, TrendingDown, TrendingUp } from 'lucide-react';
 import { Athlete, ScoutEntry } from '../types';
 import { SCOUT_FIELDS, scoutMonthKey, scoutValue } from '../scout';
 import { SheetSelect } from './SheetSelect';
@@ -47,16 +47,6 @@ export const GENERAL_ICONS: Record<string, LucideIcon> = {
 };
 
 // Fundamentos: percentual de acerto (certos sobre o total) e as parcelas que formam o total
-const OK_TONE = 'bg-primary';
-const MISS_TONE = 'bg-white/25';
-export const RATES = [
-  { label: 'Ações', ok: 'actionsOk', total: 'actionsTotal', pct: 'actionsPct', parts: [{ key: 'actionsOk', label: 'Bem sucedidas', tone: OK_TONE }, { key: 'actionsBad', label: 'Mal sucedidas', tone: MISS_TONE }] },
-  { label: 'Passes', ok: 'passesCompleted', total: 'passesTotal', pct: 'passesPct', parts: [{ key: 'passesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'passesMissed', label: 'Errados', tone: MISS_TONE }] },
-  { label: 'Passes longos', ok: 'longPassesCompleted', total: 'longPassesTotal', pct: 'longPassesPct', parts: [{ key: 'longPassesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'longPassesMissed', label: 'Errados', tone: MISS_TONE }] },
-  { label: 'Finalizações', ok: 'shotsOnTarget', total: 'shotsTotal', pct: 'shotsPct', parts: [{ key: 'shotsOnTarget', label: 'Certas', tone: OK_TONE }, { key: 'shotsOff', label: 'Fora', tone: 'bg-white/45' }, { key: 'shotsBlocked', label: 'Bloqueadas', tone: 'bg-white/20' }] },
-  { label: 'Cruzamentos', ok: 'crossesCompleted', total: 'crossesTotal', pct: 'crossesPct', parts: [{ key: 'crossesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'crossesMissed', label: 'Errados', tone: MISS_TONE }] },
-  { label: 'Dribles', ok: 'dribblesCompleted', total: 'dribblesTotal', pct: 'dribblesPct', parts: [{ key: 'dribblesCompleted', label: 'Certos', tone: OK_TONE }, { key: 'dribblesMissed', label: 'Errados', tone: MISS_TONE }] },
-];
 
 // Número usado no ranking de atletas
 const RANKING_KEYS = ['minutes', 'goals', 'assists'];
@@ -86,26 +76,30 @@ const sumStats = (list: ScoutEntry[]) => {
 const toggleClass = (on: boolean) =>
   `rounded-full px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.14em] transition ${on ? 'bg-primary text-background' : 'border border-white/10 text-on-surface-variant hover:bg-white/10 hover:text-white'}`;
 
-// Radar do perfil técnico: um eixo por aproveitamento, todos de 0 a 100%
-const RADAR = { width: 440, height: 310, cx: 220, cy: 155, radius: 105, labelRadius: 122 };
-const radarPoint = (index: number, ratio: number, radius = RADAR.radius) => {
-  const angle = ((-90 + index * (360 / RATES.length)) * Math.PI) / 180;
-  return { x: RADAR.cx + Math.cos(angle) * radius * ratio, y: RADAR.cy + Math.sin(angle) * radius * ratio };
-};
-const radarPolygon = (ratios: number[]) => ratios.map((ratio, index) => { const p = radarPoint(index, ratio); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
+// Radar do perfil técnico: um eixo por linha do perfil, todos de 0 a 100% do raio
+const RADAR = { width: 540, height: 310, cx: 270, cy: 155, radius: 105, labelRadius: 122 };
+// Eixo do radar: label, o texto mostrado embaixo dele, quanto do raio ocupa (0 a 100; undefined = sem lançamentos) e o mesmo para a comparação
+export interface RadarAxis { label: string; text: string; value?: number; reference?: number; title: string }
 
-// values: aproveitamento dos lançamentos filtrados; reference: o de todos os atletas, para comparar quando há um atleta escolhido
-export const RadarChart: React.FC<{ values: (number | undefined)[]; reference?: (number | undefined)[] }> = ({ values, reference }) => (
-  <svg viewBox={`0 0 ${RADAR.width} ${RADAR.height}`} className="mx-auto w-full max-w-[640px]" role="img" aria-label="Radar de aproveitamento">
+// axes: uma ponta por eixo; compare: desenha a linha tracejada de todos os atletas (quando há um atleta escolhido)
+export const RadarChart: React.FC<{ axes: RadarAxis[]; compare?: boolean }> = ({ axes, compare }) => {
+  const radarPoint = (index: number, ratio: number, radius = RADAR.radius) => {
+    const angle = ((-90 + index * (360 / axes.length)) * Math.PI) / 180;
+    return { x: RADAR.cx + Math.cos(angle) * radius * ratio, y: RADAR.cy + Math.sin(angle) * radius * ratio };
+  };
+  const radarPolygon = (ratios: number[]) => ratios.map((ratio, index) => { const p = radarPoint(index, ratio); return `${p.x.toFixed(1)},${p.y.toFixed(1)}`; }).join(' ');
+  const values = axes.map((axis) => axis.value);
+  return (
+  <svg viewBox={`0 0 ${RADAR.width} ${RADAR.height}`} className="mx-auto w-full max-w-[580px]" role="img" aria-label="Radar do perfil técnico">
     {[0.25, 0.5, 0.75, 1].map((ring) => (
-      <polygon key={ring} points={radarPolygon(RATES.map(() => ring))} className={ring === 1 ? 'fill-white/[0.03] stroke-white/25' : 'fill-none stroke-white/10'} strokeWidth="1" />
+      <polygon key={ring} points={radarPolygon(axes.map(() => ring))} className={ring === 1 ? 'fill-white/[0.03] stroke-white/25' : 'fill-none stroke-white/10'} strokeWidth="1" />
     ))}
-    {RATES.map((rate, index) => {
+    {axes.map((axis, index) => {
       const end = radarPoint(index, 1);
-      return <line key={rate.pct} x1={RADAR.cx} y1={RADAR.cy} x2={end.x} y2={end.y} className="stroke-white/10" strokeWidth="1" />;
+      return <line key={axis.label} x1={RADAR.cx} y1={RADAR.cy} x2={end.x} y2={end.y} className="stroke-white/10" strokeWidth="1" />;
     })}
-    {reference && (
-      <polygon points={radarPolygon(reference.map((pct) => (pct || 0) / 100))} fill="none" className="stroke-white/50" strokeWidth="1.5" strokeDasharray="4 4" strokeLinejoin="round" />
+    {compare && (
+      <polygon points={radarPolygon(axes.map((axis) => (axis.reference || 0) / 100))} fill="none" className="stroke-white/50" strokeWidth="1.5" strokeDasharray="4 4" strokeLinejoin="round" />
     )}
     <defs>
       <radialGradient id="radar-fill" gradientUnits="userSpaceOnUse" cx={RADAR.cx} cy={RADAR.cy} r={RADAR.radius}>
@@ -119,23 +113,23 @@ export const RadarChart: React.FC<{ values: (number | undefined)[]; reference?: 
       const p = radarPoint(index, pct / 100);
       return <circle key={index} cx={p.x} cy={p.y} r="4" className="fill-primary stroke-surface-low" strokeWidth="2" />;
     })}
-    {RATES.map((rate, index) => {
+    {axes.map((axis, index) => {
       const p = radarPoint(index, 1, RADAR.labelRadius);
       const side = Math.round(p.x - RADAR.cx);
       const anchor = side === 0 ? 'middle' : side > 0 ? 'start' : 'end';
       // Em cima e embaixo o texto fica fora do radar; nos lados, centralizado na altura do eixo
       const y = side === 0 ? (p.y < RADAR.cy ? p.y - 16 : p.y + 12) : p.y - 4;
-      const pct = values[index];
       return (
-        <text key={rate.pct} x={p.x} y={y} textAnchor={anchor}>
-          <title>{`${rate.label}: ${pct === undefined ? 'sem lançamentos' : `${pct}%`}${reference ? ` · todos os atletas do filtro:${reference[index] === undefined ? '-' : `${reference[index]}%`}` : ''}`}</title>
-          <tspan x={p.x} className="fill-on-surface-variant text-[11px] font-black uppercase">{rate.label}</tspan>
-          <tspan x={p.x} dy="15" className="fill-white text-[14px] font-black">{pct === undefined ? '-' : `${pct}%`}</tspan>
+        <text key={axis.label} x={p.x} y={y} textAnchor={anchor}>
+          <title>{axis.title}</title>
+          <tspan x={p.x} className="fill-on-surface-variant text-[11px] font-black uppercase">{axis.label}</tspan>
+          <tspan x={p.x} dy="15" className="fill-white text-[14px] font-black">{axis.text}</tspan>
         </text>
       );
     })}
   </svg>
-);
+  );
+};
 
 const RING_RADIUS = 34;
 const RING_LENGTH = 2 * Math.PI * RING_RADIUS;
@@ -237,17 +231,54 @@ const NumberTile: React.FC<{ label: string; value: number }> = ({ label, value }
   </div>
 );
 
-// Perfil técnico, igual no perfil do atleta e na aba Scout: o radar dos seis aproveitamentos à esquerda e, à direita,
-// o ponto forte, o ponto a evoluir e uma linha por fundamento (acertos sobre o total e a barra do percentual).
+// Nome curto de cada aproveitamento no perfil técnico (pela chave do acerto)
+const PROFILE_LABELS: Record<string, string> = {
+  passesCompleted: 'Passes', longPassesCompleted: 'Passes longos', shotsOnTarget: 'Finalizações', crossesCompleted: 'Cruzamentos',
+  dribblesCompleted: 'Dribles', aerialOffWon: 'Duelos Aéreos Ofe', tackles: 'Desarmes', aerialDefWon: 'Duelos Aéreos Def',
+};
+const [TACKLES_PAIR, AERIAL_DEF_PAIR] = DEFENSIVE_PAIRS;
+// O que o perfil técnico mostra em cada visualização, ditado pelo usuário: a lista ao lado traz os aproveitamentos (pairs)
+// e os números soltos (counts), nesta ordem; o radar traz só os mais importantes (radar, pela chave do acerto ou do número).
+// Em "gerais" a ordem da lista põe Desarmes antes dos duelos aéreos, e o radar junta os três do ataque e os três da defesa (escolha nossa)
+const PROFILE_VIEWS: Record<BlockView, { pairs: Pair[]; counts: string[]; radar: string[] }> = {
+  general: {
+    pairs: [...OFFENSIVE_PAIRS.slice(0, 5), TACKLES_PAIR, OFFENSIVE_PAIRS[5], AERIAL_DEF_PAIR],
+    counts: ['interceptions', 'dribbledPast'],
+    radar: ['passesCompleted', 'shotsOnTarget', 'dribblesCompleted', 'tackles', 'interceptions', 'dribbledPast'],
+  },
+  // Nas ações ofensivas e defensivas o radar mostra tudo (radar vazio = todas as linhas): o corte vale só para as gerais, a pedido do usuário
+  offensive: { pairs: OFFENSIVE_PAIRS, counts: [], radar: [] },
+  defensive: { pairs: DEFENSIVE_PAIRS, counts: ['interceptions', 'dribbledPast', 'foulsCommitted'], radar: [] },
+};
+const pairRate = (pair: Pair, totals: Record<string, number>) => {
+  const ok = totals[pair.ok] || 0;
+  const total = ok + pair.miss.reduce((sum, key) => sum + (totals[key] || 0), 0);
+  return { ok, total, pct: total ? Math.round((ok / total) * 100) : undefined };
+};
+
+// Perfil técnico, igual no perfil do atleta e na aba Scout: à esquerda os botões de visualização (gerais, ofensivas e defensivas),
+// que trocam só o que este painel mostra; no meio o radar e, à direita, o ponto forte, o ponto a evoluir e uma linha por
+// fundamento (acertos sobre o total e a barra do percentual).
 // reference: soma de todos os atletas nos mesmos filtros, para comparar quando há um atleta escolhido (linha tracejada e risco na barra)
 export const TechnicalProfile: React.FC<{ totals: Record<string, number>; reference?: Record<string, number> }> = ({ totals, reference }) => {
-  const rows = RATES.map((rate) => ({
-    label: rate.label,
-    pct: scoutValue(fieldOf(rate.pct), totals),
-    ok: scoutValue(fieldOf(rate.ok), totals) || 0,
-    total: scoutValue(fieldOf(rate.total), totals) || 0,
-    referencePct: reference && scoutValue(fieldOf(rate.pct), reference),
-  }));
+  const [view, setView] = useState<BlockView>('general');
+  const { pairs, counts, radar } = PROFILE_VIEWS[view];
+  // Número solto não tem percentual: no radar e na barra vale a proporção sobre o maior deles
+  const maxCount = Math.max(1, ...counts.map((key) => totals[key] || 0));
+  const rows: { key: string; label: string; pct?: number; ok: number; total: number; referencePct?: number; count?: number }[] = [
+    ...pairs.map((pair) => ({ key: pair.ok, label: PROFILE_LABELS[pair.ok], ...pairRate(pair, totals), referencePct: reference && pairRate(pair, reference).pct })),
+    ...counts.map((key) => ({ key, label: fieldOf(key).label, ok: 0, total: 0, count: totals[key] || 0 })),
+  ];
+  // O radar mostra só as linhas mais importantes da visualização; a lista ao lado mostra todas
+  const axes: RadarAxis[] = (radar.length ? radar.map((key) => rows.find((row) => row.key === key)!) : rows).map((row) => row.count !== undefined
+    ? { label: row.label, text: format(row.count), value: (row.count / maxCount) * 100, title: `${row.label}: ${format(row.count)}` }
+    : {
+      label: row.label,
+      text: row.pct === undefined ? '-' : `${row.pct}%`,
+      value: row.pct,
+      reference: row.referencePct,
+      title: `${row.label}: ${row.pct === undefined ? 'sem lançamentos' : `${row.pct}%`}${reference ? ` · todos os atletas do filtro: ${row.referencePct === undefined ? '-' : `${row.referencePct}%`}` : ''}`,
+    });
   const rated = rows.filter((row) => row.pct !== undefined);
   const best = rated.reduce<typeof rows[number] | undefined>((top, row) => (!top || row.pct! > top.pct! ? row : top), undefined);
   const worst = rated.reduce<typeof rows[number] | undefined>((low, row) => (!low || row.pct! < low.pct! ? row : low), undefined);
@@ -257,43 +288,55 @@ export const TechnicalProfile: React.FC<{ totals: Record<string, number>; refere
     <div className={`${panelClass} relative overflow-hidden`}>
       <div className={topLineClass} />
       <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-white/[0.06] blur-3xl" />
-      <div className="relative grid lg:grid-cols-2">
-        <div className="flex min-w-0 flex-col justify-center p-5 sm:p-6">
+      {/* Radar em cima, na largura toda, e as informações embaixo, a pedido do usuário (antes ficavam lado a lado) */}
+      <div className="relative">
+        <div className="flex min-w-0 flex-col p-5 sm:p-6">
+          {/* Botões de visualização em cima do radar, um ao lado do outro */}
+          <BlockViewButtons view={view} onChange={setView} />
+          <div className="flex min-w-0 flex-1 flex-col justify-center pt-4">
           {reference && (
             <p className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] font-bold text-on-surface-variant">
               <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded-full bg-primary" />Atleta</span>
               <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t border-dashed border-white/60" />Todos os atletas</span>
             </p>
           )}
-          <RadarChart values={rows.map((row) => row.pct)} reference={reference && rows.map((row) => row.referencePct)} />
+          <RadarChart axes={axes} compare={Boolean(reference)} />
+          </div>
         </div>
 
-        <div className="min-w-0 border-t border-white/10 p-5 sm:p-6 lg:border-l lg:border-t-0">
+        <div className="min-w-0 border-t border-white/10 p-5 sm:p-6">
           {highlights.length > 0 && (
             <div className="mb-5 grid grid-cols-2 gap-3">
               {highlights.map(({ title, row, strong }) => (
-                <div key={title} className={`min-w-0 rounded-2xl border px-4 py-3.5 ${strong ? 'border-white/25 bg-white/[0.07] shadow-[0_0_28px_rgba(255,255,255,0.06)]' : 'border-white/10 bg-white/[0.03]'}`}>
-                  <p className="text-xs font-black uppercase tracking-[0.18em] text-on-surface-variant">{title}</p>
-                  <p className={`mt-2 text-4xl font-black italic leading-none tracking-tight ${strong ? 'text-white' : 'text-zinc-400'}`}>{row.pct}%</p>
-                  <p className="mt-2 truncate text-sm font-black uppercase tracking-[0.12em] text-white">{row.label}</p>
+                <div key={title} className={`flex min-w-0 items-center justify-between gap-3 rounded-2xl border px-4 py-3 ${strong ? 'border-white/25 bg-white/[0.07] shadow-[0_0_28px_rgba(255,255,255,0.06)]' : 'border-white/10 bg-white/[0.03]'}`}>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-on-surface-variant">{title}</p>
+                    <p className="mt-1.5 truncate text-xs font-black uppercase tracking-[0.12em] text-white">{row.label}</p>
+                  </div>
+                  <p className={`shrink-0 text-3xl font-black italic leading-none tracking-tight ${strong ? 'text-white' : 'text-zinc-400'}`}>{row.pct}%</p>
                 </div>
               ))}
             </div>
           )}
-          <div className="space-y-4">
-            {rows.map((row) => (
-              <div key={row.label} title={row.pct === undefined ? `${row.label}: sem lançamentos` : `${row.label}: ${row.ok} de ${row.total} (${row.pct}%)${row.referencePct === undefined ? '' : ` · todos os atletas do filtro: ${row.referencePct}%`}`}>
+          <div className="grid gap-x-8 gap-y-3.5 sm:grid-cols-2">
+            {rows.map((row) => {
+              // Largura da barra: o percentual, ou, no número solto, a proporção sobre o maior deles
+              const width = row.count !== undefined ? (row.count / maxCount) * 100 : row.pct;
+              return (
+              <div key={row.label} title={row.count !== undefined ? `${row.label}: ${format(row.count)}` : row.pct === undefined ? `${row.label}: sem lançamentos` : `${row.label}: ${row.ok} de ${row.total} (${row.pct}%)${row.referencePct === undefined ? '' : ` · todos os atletas do filtro: ${row.referencePct}%`}`}>
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-sm font-black uppercase tracking-[0.12em] text-white">{row.label}</p>
-                  <p className="shrink-0 text-sm font-bold text-on-surface-variant">
-                    {row.pct === undefined ? '-' : <><span className="font-black text-white">{format(row.ok)}</span> de {format(row.total)}</>}
+                  <p className="truncate text-xs font-black uppercase tracking-[0.12em] text-white">{row.label}</p>
+                  <p className="shrink-0 text-xs font-bold text-on-surface-variant">
+                    {row.count !== undefined
+                      ? <span className="font-black text-white">{format(row.count)}</span>
+                      : row.pct === undefined ? '-' : <><span className="font-black text-white">{format(row.ok)}</span> de {format(row.total)}</>}
                   </p>
                 </div>
-                <div className="relative mt-2 h-2 rounded-full bg-white/10">
-                  {row.pct !== undefined && row.pct > 0 && (
+                <div className="relative mt-1.5 h-1.5 rounded-full bg-white/10">
+                  {width !== undefined && width > 0 && (
                     <div
                       className={`h-full rounded-full transition-[width] duration-500 ${row === best ? 'bg-gradient-to-r from-zinc-300 to-white shadow-[0_0_14px_rgba(255,255,255,0.3)]' : 'bg-gradient-to-r from-zinc-600 to-zinc-300'}`}
-                      style={{ width: `${Math.min(row.pct, 100)}%` }}
+                      style={{ width: `${Math.min(width, 100)}%` }}
                     />
                   )}
                   {row.referencePct !== undefined && (
@@ -301,7 +344,8 @@ export const TechnicalProfile: React.FC<{ totals: Record<string, number>; refere
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -309,7 +353,36 @@ export const TechnicalProfile: React.FC<{ totals: Record<string, number>; refere
   );
 };
 
+// Visualização do perfil técnico (radar e lista ao lado), escolhida nos botões à esquerda do radar
+type BlockView = 'general' | 'offensive' | 'defensive';
+const BLOCK_VIEWS: { key: BlockView; label: string; icon: LucideIcon }[] = [
+  { key: 'general', label: 'Ações gerais', icon: Activity },
+  { key: 'offensive', label: 'Ações ofensivas', icon: Swords },
+  { key: 'defensive', label: 'Ações defensivas', icon: Shield },
+];
+
+// Botões de visualização do perfil técnico, em linha, em cima do radar
+const BlockViewButtons: React.FC<{ view: BlockView; onChange: (view: BlockView) => void }> = ({ view, onChange }) => (
+  <div className="grid grid-cols-3 gap-1.5">
+    {BLOCK_VIEWS.map(({ key, label, icon: Icon }) => (
+      <button
+        key={key}
+        type="button"
+        onClick={() => onChange(key)}
+        aria-pressed={view === key}
+        className={`flex items-center gap-2.5 rounded-2xl px-3 py-3 text-left text-[10px] font-black uppercase tracking-[0.14em] transition max-sm:flex-col max-sm:px-1.5 max-sm:text-center max-sm:text-[8px] ${view === key ? 'bg-primary text-background shadow-[0_8px_24px_rgba(255,255,255,0.15)]' : 'border border-white/10 bg-white/[0.03] text-white/75 hover:bg-white/[0.07] hover:text-white'}`}
+      >
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border ${view === key ? 'border-background/15 bg-background/10' : 'border-white/15 bg-white/[0.04]'}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 leading-tight">{label}</span>
+      </button>
+    ))}
+  </div>
+);
+
 // Os três blocos do scout técnico (ações gerais, ofensivas e defensivas), iguais no perfil do atleta e na aba Scout, a pedido do usuário.
+// Os três aparecem sempre: os botões de visualização do perfil técnico não mexem aqui, a pedido do usuário.
 // totals: soma dos números lançados; title: desenha o título de cada bloco no estilo da tela que usa
 export const TechnicalBlocks: React.FC<{ totals: Record<string, number>; title: (text: string) => React.ReactNode }> = ({ totals, title }) => {
   const value = (key: string) => scoutValue(fieldOf(key), totals) || 0;
@@ -357,10 +430,15 @@ export const TechnicalBlocks: React.FC<{ totals: Record<string, number>; title: 
 
 // Resumo do scout com gráficos (aba "Scout"), sobre os lançamentos filtrados por atleta e competição.
 // Preto e branco como o resto do app: branco é o valor, branco translúcido é o complemento
+const LIST_OPTIONS = [{ value: 'agenciados', label: 'Agenciados' }, { value: 'negociados', label: 'Negociados' }];
+// Mesma pessoa nos dois cadastros: mesmo nome completo e mesma data de nascimento
+const personKey = (athlete: Athlete) => `${`${athlete.name} ${athlete.lastName || ''}`.trim().toLowerCase().replace(/\s+/g, ' ')}|${(athlete.birthDate || '').slice(0, 10)}`;
+
 // onTechnicalChange avisa a aba quando a tela do scout técnico abre ou fecha (a tabela de lançamentos some enquanto ela está aberta)
 export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entries: ScoutEntry[]; athletes: Athlete[]; onTechnicalChange?: (open: boolean) => void }) => {
   const [athleteId, setAthleteId] = useState('');
-  const [competition, setCompetition] = useState('');
+  // '' = as duas listas; o filtro de competição deu lugar a este a pedido do usuário
+  const [listType, setListType] = useState('');
   const [category, setCategory] = useState('');
   const [position, setPosition] = useState('');
   const [rankingKey, setRankingKey] = useState(RANKING_KEYS[0]);
@@ -374,10 +452,23 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
   // Lançamento de atleta apagado não entra no resumo
   const valid = useMemo(() => entries.filter((entry) => athleteById.has(entry.athleteId)), [entries, athleteById]);
 
-  // Categoria e posição vêm do cadastro do atleta de cada lançamento
-  const matchesAthlete = (id: string, wantedCategory = category, wantedPosition = position) => {
+  // Listas de cada pessoa: quem está nas duas (mesmo nome completo e nascimento) entra nos dois filtros
+  const listsByPerson = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    athletes.forEach((athlete) => {
+      const key = personKey(athlete);
+      map.set(key, (map.get(key) || new Set<string>()).add(athlete.listType || 'agenciados'));
+    });
+    return map;
+  }, [athletes]);
+
+  // Lista, categoria e posição vêm do cadastro do atleta de cada lançamento
+  const matchesAthlete = (id: string, wantedCategory = category, wantedPosition = position, wantedList = listType) => {
     const athlete = athleteById.get(id);
-    return Boolean(athlete) && (!wantedCategory || athlete!.category === wantedCategory) && (!wantedPosition || athlete!.position === wantedPosition);
+    return Boolean(athlete)
+      && (!wantedList || Boolean(listsByPerson.get(personKey(athlete!))?.has(wantedList)))
+      && (!wantedCategory || athlete!.category === wantedCategory)
+      && (!wantedPosition || athlete!.position === wantedPosition);
   };
 
   // Atletas com lançamento, só os da categoria e da posição escolhidas
@@ -387,7 +478,7 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
       .filter((id) => matchesAthlete(id))
       .map((id) => ({ value: id, label: fullName(athleteById.get(id)!) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [valid, athleteById, category, position]);
+  }, [valid, athleteById, category, position, listType, listsByPerson]);
   // Opções de categoria e posição: as dos atletas que têm lançamento
   const athleteFieldOptions = (field: 'category' | 'position') =>
     [...new Set<string>(valid.map((entry) => athleteById.get(entry.athleteId)![field]).filter(Boolean))]
@@ -405,13 +496,13 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
     setPosition(next);
     if (athleteId && !matchesAthlete(athleteId, category, next)) setAthleteId('');
   };
-  const competitionOptions = useMemo(
-    () => [...new Set<string>(valid.map((entry) => entry.competition).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map((name) => ({ value: name, label: name })),
-    [valid],
-  );
+  const pickList = (next: string) => {
+    setListType(next);
+    if (athleteId && !matchesAthlete(athleteId, category, position, next)) setAthleteId('');
+  };
 
-  // Lançamentos da competição, da categoria e da posição escolhidas, de todos os atletas
-  const peers = valid.filter((entry) => (!competition || entry.competition === competition) && matchesAthlete(entry.athleteId));
+  // Lançamentos da lista, da categoria e da posição escolhidas, de todos os atletas
+  const peers = valid.filter((entry) => matchesAthlete(entry.athleteId));
   const filtered = peers.filter((entry) => !athleteId || entry.athleteId === athleteId);
 
   const totals = sumStats(filtered);
@@ -551,8 +642,8 @@ export const ScoutOverview = ({ entries, athletes, onTechnicalChange }: { entrie
           <SheetSelect value={athleteId} options={athleteOptions} onChange={setAthleteId} label="Filtrar por atleta" placeholder="Todos os atletas" className={filterClass} />
         </div>
         <div className="min-w-0">
-          <p className={`${labelClass} mb-2`}>Competição</p>
-          <SheetSelect value={competition} options={competitionOptions} onChange={setCompetition} label="Filtrar por competição" placeholder="Todas as competições" className={filterClass} />
+          <p className={`${labelClass} mb-2`}>Lista</p>
+          <SheetSelect value={listType} options={LIST_OPTIONS} onChange={pickList} label="Filtrar por agenciados ou negociados" placeholder="Agenciados e negociados" className={filterClass} />
         </div>
         <div className="min-w-0">
           <p className={`${labelClass} mb-2`}>Categoria</p>

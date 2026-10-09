@@ -1239,7 +1239,8 @@ export default function App() {
     recordActivity(meetings.filter(meeting => !knownMeetings.has(meeting.id)).map(meeting => ({
       type: 'TACTICAL',
       title: 'NOVA REUNIÃO TÁTICA',
-      details: [meeting.title, formatDay(meeting.date, meeting.time)].filter(Boolean).join(' · '),
+      // Tipo da reunião (Pós Jogo etc.) antes do conteúdo; conteúdo deixado em branco já é o próprio tipo
+      details: Array.from(new Set([(meeting.types || []).join(' · '), meeting.title, formatDay(meeting.date, meeting.time)].filter(Boolean))).join(' · '),
       ...athleteActivity(athlete),
     })));
 
@@ -1661,7 +1662,7 @@ export default function App() {
               )}
               <Suspense fallback={<LoadingPanel />}>
               {profileDetailView === 'calendar' ? (
-                <AthleteGames athlete={selectedAthlete} games={games} />
+                <AthleteGames athlete={selectedAthlete} />
               ) : profileDetailView === 'stats' ? (
                 <AthleteScout entries={scoutEntriesOf(selectedAthlete)} />
               ) : profileDetailView === 'tactical' ? (
@@ -1680,9 +1681,9 @@ export default function App() {
                   onDownloadContract={() => downloadContractFile(selectedAthlete.contractFile)}
                 />
               ) : profileDetailView === 'pdf' ? (
-                <AthletePdf athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} games={games} />
+                <AthletePdf athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} />
               ) : (
-                <AthleteInfo athlete={selectedAthlete} onOpenContract={() => openContractFile(selectedAthlete.contractFile)} onOpenLoanContract={() => openContractFile(selectedAthlete.loanContractFile)} clubLogoOf={resolveClubLogo} />
+                <AthleteInfo athlete={selectedAthlete} entries={scoutEntriesOf(selectedAthlete)} onOpenContract={() => openContractFile(selectedAthlete.contractFile)} onOpenLoanContract={() => openContractFile(selectedAthlete.loanContractFile)} clubLogoOf={resolveClubLogo} />
               )}
               </Suspense>
             </div>

@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { ScoutEntry } from '../types';
 import { scoutValue, sortScoutEntries } from '../scout';
 import {
-  GAMES_KEY, GAMES_LABEL, GENERAL_ICONS, HEADLINE_KEYS, RATES, RadarChart, SHEET_KEYS, SHEET_TILE_KEYS,
+  GAMES_KEY, GAMES_LABEL, GENERAL_ICONS, HEADLINE_KEYS, SHEET_KEYS, SHEET_TILE_KEYS,
   TILE_TONES, TechnicalBlocks, TechnicalProfile, fieldOf, labelClass, panelClass,
 } from './ScoutOverview';
 
@@ -27,8 +27,9 @@ const SectionTitle = ({ children, aside }: { children: React.ReactNode; aside?: 
 // (só quando algum jogo tem números além dos da súmula). O detalhe de cada partida saiu daqui a pedido do usuário.
 // Recebe só os lançamentos do atleta; jogos do Calendário ficam no ícone Calendário
 export const AthleteScout = ({ entries }: { entries: ScoutEntry[] }) => {
-  // O scout técnico (ações gerais, ofensivas e defensivas) fica recolhido até o botão ser clicado
-  const [showTechnical, setShowTechnical] = useState(false);
+  // Tela à mostra: a inicial (cards), o scout geral (radar, antes "Perfil técnico") ou o scout técnico (ações gerais, ofensivas e defensivas).
+  // As duas últimas abrem pelos botões de baixo da tela inicial
+  const [screen, setScreen] = useState<'main' | 'general' | 'technical'>('main');
   const sorted = sortScoutEntries(entries);
   // Soma de cada número lançado; totais e percentuais são calculados sobre essa soma
   const totals: Record<string, number> = {};
@@ -52,34 +53,37 @@ export const AthleteScout = ({ entries }: { entries: ScoutEntry[] }) => {
   // Jogos com algum número além dos da súmula (jogos com transmissão)
   const technicalCount = sorted.filter((entry) => Object.keys(entry.stats).some((key) => !SHEET_KEYS.has(key))).length;
 
-  // Botão que troca o scout geral pela tela do scout técnico e volta; fica abaixo do perfil técnico e, na tela do scout técnico, no topo
-  const technicalButton = (
+  // Botão que troca a tela inicial pela tela pedida e volta; fica embaixo na tela inicial e, na tela aberta, no topo
+  const screenButton = (target: 'general' | 'technical', title: string, openLabel: string) => (
     <button
       type="button"
-      onClick={() => setShowTechnical((open) => !open)}
+      onClick={() => setScreen((current) => (current === target ? 'main' : target))}
       className={`${panelClass} relative flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3 overflow-hidden px-5 py-5 text-left transition hover:bg-white/[0.06] sm:px-6`}
     >
       <div className={topLineClass} />
       <div className="min-w-0">
-        <p className="text-base font-black uppercase italic tracking-tight text-white">Scout técnico</p>
+        <p className="text-base font-black uppercase italic tracking-tight text-white">{title}</p>
         <p className="mt-1 text-[10px] font-bold text-on-surface-variant">
           Jogos com transmissão · <span className="text-white">{technicalCount}</span> de <span className="text-white">{gamesText(games)}</span>
         </p>
       </div>
       <span className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[10px] font-black uppercase tracking-[0.2em] text-background">
-        {showTechnical && <ArrowLeft className="h-3.5 w-3.5" />}
-        {showTechnical ? "Voltar para o scout geral" : "Ver scout técnico"}
-        {!showTechnical && <ArrowRight className="h-3.5 w-3.5" />}
+        {screen === target && <ArrowLeft className="h-3.5 w-3.5" />}
+        {screen === target ? 'Voltar' : openLabel}
+        {screen !== target && <ArrowRight className="h-3.5 w-3.5" />}
       </span>
     </button>
   );
+  const generalButton = screenButton('general', 'Scout geral', 'Ver scout geral');
+  const technicalButton = screenButton('technical', 'Scout técnico', 'Ver scout técnico');
 
   return (
     <div className="mt-8 space-y-10">
-      {showTechnical && technicalButton}
+      {screen === 'general' && generalButton}
+      {screen === 'technical' && technicalButton}
 
-      {/* Scout geral e perfil técnico; o botão "Scout técnico" troca tudo pelos números técnicos, como na aba Scout */}
-      {!showTechnical && (
+      {/* Tela inicial: os cards e, embaixo, os botões que abrem o scout geral (radar) e o scout técnico */}
+      {screen === 'main' && (
       <>
       <section className="space-y-4">
         <SectionTitle aside={gamesText(games)}>Scout geral</SectionTitle>
@@ -144,24 +148,17 @@ export const AthleteScout = ({ entries }: { entries: ScoutEntry[] }) => {
       </section>
 
       {technicalCount > 0 && (
-        <>
-          <section className="space-y-4">
-            <SectionTitle>Perfil técnico</SectionTitle>
-            <TechnicalProfile totals={totals} />
-          </section>
-
+        <div className="space-y-3">
+          {generalButton}
           {technicalButton}
-        </>
+        </div>
       )}
       </>
       )}
 
-      {showTechnical && (
-        <>
+      {screen === 'general' && <TechnicalProfile totals={totals} />}
 
-          <TechnicalBlocks totals={totals} title={(text) => <SectionTitle>{text}</SectionTitle>} />
-        </>
-      )}
+      {screen === 'technical' && <TechnicalBlocks totals={totals} title={(text) => <SectionTitle>{text}</SectionTitle>} />}
 
     </div>
   );
