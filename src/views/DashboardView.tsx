@@ -448,8 +448,8 @@ export const DashboardView = ({ athletes, games = [], scoutEntries = [], onNavig
               {categoryBreakdown.map((item) => {
                 const percentage = (item.count / Math.max(totalPeopleCount, 1)) * 100;
                 return (
-                  <div key={item.label} className="max-sm:rounded-xl max-sm:border max-sm:border-white/10 max-sm:bg-white/[0.03] max-sm:px-1 max-sm:py-2.5 sm:grid sm:grid-cols-[6.5rem_1fr_2.5rem] sm:items-center sm:gap-3">
-                    <span className="block text-[9px] font-black uppercase tracking-[0.16em] text-on-surface-variant max-sm:hidden">{item.label}</span>
+                  <div key={item.label} className="max-sm:rounded-xl max-sm:border max-sm:border-white/10 max-sm:bg-white/[0.03] max-sm:px-1 max-sm:py-2.5 sm:grid sm:grid-cols-[8.5rem_1fr_2.5rem] sm:items-center sm:gap-3">
+                    <span className="block text-xs font-black uppercase tracking-[0.12em] text-on-surface-variant max-sm:hidden">{item.label}</span>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-white/10 max-sm:hidden">
                       <motion.div
                         initial={{ width: 0 }}

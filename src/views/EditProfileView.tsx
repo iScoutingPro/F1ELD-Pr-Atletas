@@ -6,6 +6,7 @@ import { Athlete } from '../types';
 import { CountrySelect } from '../components/CountrySelect';
 import { ImageCropper } from '../components/ImageCropper';
 import { ClubPicker } from '../components/ClubPicker';
+import { Logo } from '../components/Logo';
 import { normalize } from '../components/SheetSelect';
 import { NATIONALITY_COUNTRIES, SECOND_NATIONALITY_COUNTRIES } from '../countries';
 import { CATEGORIES } from '../categories';
@@ -323,6 +324,19 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
               </button>
             )}
           </div>
+          {/* No cadastro, a marca da lista escolhida na pergunta "agenciado ou negociado" */}
+          {!athlete && (
+            <span
+              title={isNegociado ? 'Cosmopolitano Sports' : 'Field'}
+              className="flex h-14 w-24 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/30 p-1.5 sm:h-24 sm:w-40 sm:p-2"
+            >
+              {isNegociado ? (
+                <img src="/assets/cosmopolitano.png" alt="Cosmopolitano Sports" className="h-full w-full object-contain brightness-0 invert" />
+              ) : (
+                <Logo variant="minimal" className="h-full w-full" />
+              )}
+            </span>
+          )}
           {onBackToProfile && (
             <button
               type="button"
@@ -559,7 +573,7 @@ export const EditProfileView = ({ athlete, onBack, onBackToProfile, onSave, onDe
           ) : (
             <div className="rounded-xl border border-error/20 bg-error/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-error italic text-center">
-                Iniciar com urgência processo de confecção.
+                Confeccionar o material do atleta.
               </p>
             </div>
           )}

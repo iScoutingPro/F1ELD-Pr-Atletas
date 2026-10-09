@@ -221,6 +221,8 @@ const isEmptyRow = (row: Row) => SHEET_COLUMNS.every(({ key }) => (row[key] || '
 export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: ScoutEntryViewProps) => {
   const [rows, setRows] = useState<Row[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Com a tela do scout técnico aberta, a tabela de lançamentos some (pedido do usuário)
+  const [technicalOpen, setTechnicalOpen] = useState(false);
   const [editing, setEditing] = useState<ScoutEntry | null>(null);
   const [saving, setSaving] = useState(false);
   const [sheetError, setSheetError] = useState('');
@@ -465,9 +467,9 @@ export const ScoutEntryView = ({ entries, athletes, games, onSave, onDelete }: S
         </button>
       </section>
 
-      <ScoutOverview entries={entries} athletes={athletes} />
+      <ScoutOverview entries={entries} athletes={athletes} onTechnicalChange={setTechnicalOpen} />
 
-      <section className="rounded-3xl border border-white/10 bg-surface-low p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <section hidden={technicalOpen && entries.length > 0} className="rounded-3xl border border-white/10 bg-surface-low p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="flex flex-wrap items-center gap-3 px-1">
           {sorted.length > 0 && (
             <>

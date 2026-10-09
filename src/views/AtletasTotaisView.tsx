@@ -346,7 +346,7 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: A
         return matchesList(entry, listFilter) &&
           (!category || athlete.category === category) &&
           (!position || athlete.position === position) &&
-          (!term || fullName(athlete).toLowerCase().includes(term) || clubOf(athlete).toLowerCase().includes(term));
+          (!term || fullName(athlete).toLowerCase().includes(term));
       })
       .sort((a, b) => fullName(a.athlete).localeCompare(fullName(b.athlete), 'pt-BR'));
   }, [entries, search, listFilter, category, position]);
@@ -440,9 +440,10 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: A
           </div>
         </div>
 
-        <div className="relative grid grid-cols-4 divide-x divide-white/10 border-t border-white/10">
-          {summary.map(({ label, value, list, icon: Icon }) => (
-            <div key={label} className="flex items-center justify-between gap-3 bg-background/80 px-1 py-3 text-center backdrop-blur sm:px-8 sm:py-3.5 sm:text-left">
+        {/* O fundo fica na faixa inteira, não em cada coluna: com fundo próprio, uma coluna cobria a divisória da vizinha */}
+        <div className="relative grid grid-cols-4 border-t border-white/10 bg-background/80 backdrop-blur">
+          {summary.map(({ label, value, list, icon: Icon }, index) => (
+            <div key={label} className={`flex items-center justify-between gap-3 px-1 py-3 text-center sm:px-8 sm:py-3.5 sm:text-left ${index > 0 ? 'border-l border-white/10' : ''}`}>
               <div className="min-w-0">
                 <p className="text-xl font-black italic leading-none tracking-tighter text-white sm:text-2xl">
                   {String(value).padStart(2, '0')}
@@ -469,7 +470,7 @@ export const AtletasTotaisView = ({ athletes, onSelectAthlete, onAddAthlete }: A
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome ou clube..."
+              placeholder="Buscar pelo nome do atleta..."
               className={`${fieldClass} py-3 pl-11 pr-10 text-sm text-white placeholder:text-on-surface-variant/50 sm:py-4 sm:pl-12 sm:pr-12`}
             />
             {search && (

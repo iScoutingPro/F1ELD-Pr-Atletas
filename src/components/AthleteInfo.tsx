@@ -367,7 +367,7 @@ export const AthleteInfo =({ athlete, onOpenContract, onOpenLoanContract, clubLo
             </div>
             <div className="min-w-0">
               <p className="text-sm font-bold text-on-surface-variant">O atleta não possui DVD.</p>
-              <p className="mt-1 text-[10px] font-black uppercase italic tracking-widest text-error">Iniciar com urgência processo de confecção.</p>
+              <p className="mt-1 text-[10px] font-black uppercase italic tracking-widest text-error">Confeccionar o material do atleta.</p>
             </div>
           </div>
         )}
